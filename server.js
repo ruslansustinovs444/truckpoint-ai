@@ -27,22 +27,43 @@ const CATALOG_PAGES = [
   }
 ];
 
+/* =========================================================
+   OPENAI
+========================================================= */
+
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
+  timeout: 20000,
+  maxRetries: 0
 });
+
+/* =========================================================
+   SMTP
+========================================================= */
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT || 465),
   secure:
     String(process.env.SMTP_SECURE || "true") === "true",
+
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS
-  }
+  },
+
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 15000
 });
 
+/* =========================================================
+   GLOBALS
+========================================================= */
+
 let catalog = [];
+
+let catalogReadyPromise = null;
 
 const syncStatus = {
   started_at: null,
@@ -52,7 +73,6 @@ const syncStatus = {
   trucks: 0,
   trailers: 0
 };
-
 
 /* =========================================================
    HELPERS
@@ -75,14 +95,12 @@ function absoluteUrl(url) {
   return `${SITE_BASE}/${url}`;
 }
 
-
 function cleanText(value) {
   return String(value || "")
     .replace(/\u00a0/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
-
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -92,7 +110,6 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
-
 
 function parsePrice(value) {
   if (!value) return null;
@@ -112,7 +129,6 @@ function parsePrice(value) {
     ? number
     : null;
 }
-
 
 function parseNumber(value) {
   if (
@@ -138,6 +154,35 @@ function parseNumber(value) {
     : null;
 }
 
+/* =========================================================
+   TIMEOUT HELPER
+========================================================= */
+
+function withTimeout(
+  promise,
+  milliseconds,
+  label = "Operation"
+) {
+  let timer;
+
+  const timeoutPromise =
+    new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        reject(
+          new Error(
+            `${label} timed out after ${milliseconds} ms`
+          )
+        );
+      }, milliseconds);
+    });
+
+  return Promise.race([
+    promise,
+    timeoutPromise
+  ]).finally(() => {
+    clearTimeout(timer);
+  });
+}
 
 /* =========================================================
    SPEC PARSING
@@ -174,7 +219,6 @@ function parseSpecs(description) {
 
   return result;
 }
-
 
 function normalizeSpecs(raw) {
   const specs = {};
@@ -263,29 +307,52 @@ function normalizeSpecs(raw) {
   return specs;
 }
 
-
 /* =========================================================
    HTTP / HTML
 ========================================================= */
 
 async function fetchHtml(url) {
-  const response =
-    await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; TruckPointAI/1.0)"
-      }
-    });
+  const controller =
+    new AbortController();
 
-  if (!response.ok) {
-    throw new Error(
-      `HTTP ${response.status} while fetching ${url}`
+  const timeout =
+    setTimeout(
+      () => controller.abort(),
+      12000
     );
+
+  try {
+    const response =
+      await fetch(url, {
+        signal: controller.signal,
+
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (compatible; TruckPointAI/1.0)"
+        }
+      });
+
+    if (!response.ok) {
+      throw new Error(
+        `HTTP ${response.status} while fetching ${url}`
+      );
+    }
+
+    return await response.text();
+
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error(
+        `Request timed out while fetching ${url}`
+      );
+    }
+
+    throw error;
+
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return await response.text();
 }
-
 
 /* =========================================================
    LIST PAGE PARSER
@@ -364,7 +431,6 @@ function parseListPage(
 
   return items;
 }
-
 
 /* =========================================================
    DETAIL PAGE PARSER
@@ -490,7 +556,6 @@ function parseDetailPage(
   };
 }
 
-
 /* =========================================================
    ENRICHMENT
 ========================================================= */
@@ -504,6 +569,7 @@ async function enrichItem(item) {
       html,
       item
     );
+
   } catch (error) {
     console.error(
       `Failed to enrich ${item.url}:`,
@@ -522,7 +588,6 @@ async function enrichItem(item) {
   }
 }
 
-
 async function enrichItems(items) {
   const result = [];
 
@@ -535,7 +600,6 @@ async function enrichItems(items) {
 
   return result;
 }
-
 
 /* =========================================================
    CATALOG SYNC
@@ -624,7 +688,6 @@ async function syncCatalog() {
   }
 }
 
-
 /* =========================================================
    SEARCH HELPERS
 ========================================================= */
@@ -642,7 +705,6 @@ function normalizeSearchText(text) {
     .trim();
 }
 
-
 function tokenize(text) {
   return normalizeSearchText(text)
     .split(/\s+/)
@@ -651,7 +713,6 @@ function tokenize(text) {
         token.length >= 2
     );
 }
-
 
 function extractBudget(text) {
   const normalized =
@@ -692,7 +753,6 @@ function extractBudget(text) {
   return null;
 }
 
-
 function extractYear(text) {
   const match =
     String(text || "").match(
@@ -707,7 +767,6 @@ function extractYear(text) {
     )
   ];
 }
-
 
 function extractEuroClasses(text) {
   const normalized =
@@ -738,7 +797,6 @@ function extractEuroClasses(text) {
     )
   ];
 }
-
 
 function detectVehicleTypes(text) {
   const normalized =
@@ -794,7 +852,6 @@ function detectVehicleTypes(text) {
   return [];
 }
 
-
 function detectBrands(text) {
   const normalized =
     normalizeSearchText(text);
@@ -824,7 +881,6 @@ function detectBrands(text) {
   );
 }
 
-
 function hasEuroClass(
   item,
   euroClass
@@ -842,7 +898,6 @@ function hasEuroClass(
     `euro ${euroClass}`
   );
 }
-
 
 function itemMatchesBrand(
   item,
@@ -877,7 +932,6 @@ function itemMatchesBrand(
     )
   );
 }
-
 
 function itemMatchesNamedVehicle(
   item,
@@ -956,9 +1010,8 @@ function itemMatchesNamedVehicle(
   );
 }
 
-
 /* =========================================================
-   COMPARISON DETECTION
+   COMPARISON
 ========================================================= */
 
 function isComparisonRequest(
@@ -991,7 +1044,6 @@ function isComparisonRequest(
   );
 }
 
-
 function getNamedCatalogItems(
   text
 ) {
@@ -1003,7 +1055,6 @@ function getNamedCatalogItems(
       )
   );
 }
-
 
 /* =========================================================
    SMART CATALOG SEARCH
@@ -1060,11 +1111,6 @@ function searchCatalog(
       userText
     );
 
-  /*
-   * Previous conversation is used only
-   * for contextual vehicle references.
-   */
-
   const conversationText =
     conversation
       .map(message => {
@@ -1085,10 +1131,6 @@ function searchCatalog(
     getNamedCatalogItems(
       conversationText
     );
-
-  /*
-   * Comparison
-   */
 
   if (comparison) {
     const comparisonItems = [
@@ -1137,17 +1179,9 @@ function searchCatalog(
     }
   }
 
-  /*
-   * General candidate selection
-   */
-
   let candidates = [
     ...catalog
   ];
-
-  /*
-   * Vehicle type
-   */
 
   if (
     vehicleTypes.length
@@ -1161,10 +1195,6 @@ function searchCatalog(
       );
   }
 
-  /*
-   * Budget
-   */
-
   if (
     budget !== null
   ) {
@@ -1176,10 +1206,6 @@ function searchCatalog(
             budget
       );
   }
-
-  /*
-   * Euro class
-   */
 
   if (
     euroClasses.length
@@ -1197,10 +1223,6 @@ function searchCatalog(
       );
   }
 
-  /*
-   * Brand OR logic
-   */
-
   if (
     brands.length
   ) {
@@ -1217,10 +1239,6 @@ function searchCatalog(
       );
   }
 
-  /*
-   * Year
-   */
-
   if (
     years.length
   ) {
@@ -1233,10 +1251,6 @@ function searchCatalog(
           )
       );
   }
-
-  /*
-   * Explicit model
-   */
 
   const hasSpecificModel =
     explicitlyNamed.length > 0;
@@ -1263,10 +1277,6 @@ function searchCatalog(
       ...rest
     ];
   }
-
-  /*
-   * Token relevance
-   */
 
   const hasStructuredFilters =
     budget !== null ||
@@ -1336,7 +1346,6 @@ function searchCatalog(
     20
   );
 }
-
 
 /* =========================================================
    CATALOG CONTEXT
@@ -1459,7 +1468,6 @@ Details loaded: ${
     )
     .join("\n");
 }
-
 
 /* =========================================================
    AI SYSTEM PROMPT
@@ -1614,76 +1622,102 @@ reliability or remaining service life.
 `;
 }
 
-
 /* =========================================================
-   LEAD INTENT DETECTION
+   LEAD INTENT
 ========================================================= */
 
-function detectLeadIntent(
-  text
-) {
+function detectLeadIntent(text) {
   const normalized =
-    normalizeSearchText(
-      text
-    );
+    normalizeSearchText(text);
 
-  const strongIntentWords = [
-    "buy",
-    "purchase",
-    "interested",
-    "available",
-    "availability",
-    "contact me",
-    "manager",
-    "documents",
-    "inspection",
-    "transport",
-    "financing",
-    "reserve",
-    "reservation",
-    "final price",
-    "buying",
-    "purchase within",
-    "want to buy",
+  const strongIntentPatterns = [
+    /\bi want to buy\b/i,
+    /\bi want to purchase\b/i,
+    /\bi would like to buy\b/i,
+    /\bi am interested in (this|the|a) (truck|tractor|trailer|vehicle)\b/i,
+    /\bis it available\b/i,
+    /\bis this available\b/i,
+    /\bplease contact me\b/i,
+    /\bcontact me\b/i,
+    /\bcan you contact me\b/i,
+    /\bcall me\b/i,
+    /\bcan i speak to (a )?manager\b/i,
+    /\bspeak to (a )?manager\b/i,
+    /\bmanager contact\b/i,
+    /\bi want to reserve\b/i,
+    /\bi want to book\b/i,
+    /\bcan i reserve\b/i,
+    /\bplease send (me )?(the )?documents\b/i,
+    /\bsend me the documents\b/i,
+    /\bcan you send documents\b/i,
+    /\bcan you check availability\b/i,
+    /\bcheck availability\b/i,
+    /\bwhat is the final price\b/i,
+    /\bfinal price\b/i,
+    /\bi want to buy within\b/i,
+    /\bi plan to buy within\b/i,
 
-    "купить",
-    "покупка",
-    "хочу купить",
-    "интересует",
-    "интересуюсь",
-    "в наличии",
-    "наличие",
-    "свяжитесь",
-    "менеджер",
-    "документы",
-    "осмотр",
-    "доставка",
-    "финансирование",
-    "забронировать",
-    "цена",
+    /хочу купить/i,
+    /хочу приобрести/i,
+    /хочу купить этот/i,
+    /интересует этот грузовик/i,
+    /интересует этот тягач/i,
+    /интересует эта машина/i,
+    /можно купить/i,
+    /он в наличии/i,
+    /она в наличии/i,
+    /есть в наличии/i,
+    /свяжитесь со мной/i,
+    /позвоните мне/i,
+    /связаться с менеджером/i,
+    /хочу поговорить с менеджером/i,
+    /проверить наличие/i,
+    /забронировать/i,
+    /пришлите документы/i,
+    /отправьте документы/i,
+    /финальная цена/i,
+    /хочу купить в течение/i,
 
-    "kaufen",
-    "interessiert",
-    "verfügbar",
-    "manager",
+    /\bich möchte kaufen\b/i,
+    /\bich will kaufen\b/i,
+    /\bist es verfügbar\b/i,
+    /\bkontaktieren sie mich\b/i,
 
-    "kupic",
-    "kupić",
-    "zainteresowany",
+    /\bchcę kupić\b/i,
+    /\bczy jest dostępny\b/i,
+    /\bproszę o kontakt\b/i,
 
-    "pirkt",
-    "interesē",
-    "pieejams"
+    /\bgribu iegādāties\b/i,
+    /\bvai ir pieejams\b/i,
+    /\blūdzu sazināties\b/i
   ];
 
-  return strongIntentWords.some(
-    word =>
-      normalized.includes(
-        word
-      )
-  );
-}
+  if (
+    strongIntentPatterns.some(
+      pattern =>
+        pattern.test(normalized)
+    )
+  ) {
+    return true;
+  }
 
+  const hasBuyingTimeframe =
+    /\b(within|in the next|next)\s+\d*\s*(week|weeks|month|months|days)\b/i.test(text) ||
+    /в течение\s+(недели|месяца|двух недель|двух месяцев)/i.test(text);
+
+  const hasVehicleInterest =
+    /\b(interested in|like|want|looking to buy)\b/i.test(text) ||
+    /интересует|нравится|хочу купить|хочу взять/i.test(text);
+
+  if (
+    hasBuyingTimeframe &&
+    hasVehicleInterest
+  ) {
+    return true;
+  }
+
+  return false;
+}
 
 /* =========================================================
    CHAT ENDPOINT
@@ -1711,11 +1745,24 @@ app.post(
       }
 
       /*
-       * Keep previous conversation reasonably small.
-       *
-       * IMPORTANT:
-       * The current message is NOT added twice.
+       * Make sure the catalog has had a chance
+       * to load before searching it.
        */
+
+      if (catalogReadyPromise) {
+        try {
+          await withTimeout(
+            catalogReadyPromise,
+            25000,
+            "Catalog initialization"
+          );
+        } catch (error) {
+          console.error(
+            "CATALOG READY ERROR:",
+            error.message
+          );
+        }
+      }
 
       const previousConversation =
         Array.isArray(messages)
@@ -1731,11 +1778,6 @@ app.post(
               .slice(-12)
           : [];
 
-      /*
-       * Search current message + previous conversation
-       * so contextual references work.
-       */
-
       const matchingCatalog =
         searchCatalog(
           userText,
@@ -1745,6 +1787,11 @@ app.post(
       console.log(
         "CHAT:",
         userText
+      );
+
+      console.log(
+        "CATALOG SIZE:",
+        catalog.length
       );
 
       console.log(
@@ -1801,15 +1848,19 @@ ${catalogContext}
       ];
 
       const completion =
-        await openai.chat.completions.create(
-          {
-            model:
-              process.env.OPENAI_MODEL ||
-              "gpt-5-mini",
+        await withTimeout(
+          openai.chat.completions.create(
+            {
+              model:
+                process.env.OPENAI_MODEL ||
+                "gpt-5-mini",
 
-            messages:
-              aiMessages
-          }
+              messages:
+                aiMessages
+            }
+          ),
+          20000,
+          "OpenAI chat request"
         );
 
       const reply =
@@ -1818,11 +1869,6 @@ ${catalogContext}
           ?.message
           ?.content ||
         "Sorry, I could not generate a response.";
-
-      /*
-       * Determine whether Tilda should show
-       * the contact form.
-       */
 
       const conversationForIntent = [
         ...previousConversation,
@@ -1882,7 +1928,6 @@ ${catalogContext}
   }
 );
 
-
 /* =========================================================
    AI LEAD EXTRACTION
 ========================================================= */
@@ -1908,20 +1953,21 @@ async function extractLeadData(
       .join("\n\n");
 
   const completion =
-    await openai.chat.completions.create(
-      {
-        model:
-          process.env.OPENAI_MODEL ||
-          "gpt-5-mini",
+    await withTimeout(
+      openai.chat.completions.create(
+        {
+          model:
+            process.env.OPENAI_MODEL ||
+            "gpt-5-mini",
 
-        response_format: {
-          type: "json_object"
-        },
+          response_format: {
+            type: "json_object"
+          },
 
-        messages: [
-          {
-            role: "system",
-            content: `
+          messages: [
+            {
+              role: "system",
+              content: `
 You are a CRM lead extraction assistant for Truck Point,
 a commercial truck and trailer sales company.
 
@@ -2025,15 +2071,18 @@ If none, use [].
 
 Return JSON only.
 `
-          },
+            },
 
-          {
-            role: "user",
-            content:
-              conversationText
-          }
-        ]
-      }
+            {
+              role: "user",
+              content:
+                conversationText
+            }
+          ]
+        }
+      ),
+      20000,
+      "OpenAI lead extraction"
     );
 
   let data = {};
@@ -2046,6 +2095,7 @@ Return JSON only.
           ?.message
           ?.content || "{}"
       );
+
   } catch (error) {
     console.error(
       "LEAD AI JSON ERROR:",
@@ -2076,7 +2126,6 @@ Return JSON only.
   return data;
 }
 
-
 /* =========================================================
    GOOGLE SHEETS WEBHOOK
 ========================================================= */
@@ -2098,12 +2147,28 @@ async function sendLeadToGoogleSheets(
     };
   }
 
+  console.log(
+    "GOOGLE SHEETS: sending lead..."
+  );
+
+  const controller =
+    new AbortController();
+
+  const timeout =
+    setTimeout(
+      () => controller.abort(),
+      10000
+    );
+
   try {
     const response =
       await fetch(
         webhookUrl,
         {
           method: "POST",
+
+          signal:
+            controller.signal,
 
           headers: {
             "Content-Type":
@@ -2125,7 +2190,7 @@ async function sendLeadToGoogleSheets(
     }
 
     console.log(
-      "Lead sent to Google Sheets"
+      "GOOGLE SHEETS: lead saved successfully"
     );
 
     return {
@@ -2133,8 +2198,80 @@ async function sendLeadToGoogleSheets(
     };
 
   } catch (error) {
+    if (
+      error.name ===
+      "AbortError"
+    ) {
+      console.error(
+        "GOOGLE SHEETS ERROR: request timed out"
+      );
+
+      return {
+        success: false,
+        error:
+          "Google Sheets request timed out"
+      };
+    }
+
     console.error(
       "GOOGLE SHEETS ERROR:",
+      error.message
+    );
+
+    return {
+      success: false,
+      error:
+        error.message
+    };
+
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/* =========================================================
+   EMAIL
+========================================================= */
+
+async function sendLeadEmail({
+  subject,
+  text
+}) {
+  console.log(
+    "EMAIL: sending lead..."
+  );
+
+  try {
+    const result =
+      await withTimeout(
+        transporter.sendMail({
+          from:
+            process.env.SMTP_USER,
+
+          to:
+            process.env.LEAD_TO_EMAIL,
+
+          subject,
+
+          text
+        }),
+        15000,
+        "SMTP email"
+      );
+
+    console.log(
+      "EMAIL: lead sent successfully"
+    );
+
+    return {
+      success: true,
+      messageId:
+        result.messageId || ""
+    };
+
+  } catch (error) {
+    console.error(
+      "EMAIL ERROR:",
       error.message
     );
 
@@ -2146,7 +2283,6 @@ async function sendLeadToGoogleSheets(
   }
 }
 
-
 /* =========================================================
    LEAD ENDPOINT
 ========================================================= */
@@ -2154,6 +2290,19 @@ async function sendLeadToGoogleSheets(
 app.post(
   "/api/lead",
   async (req, res) => {
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "LEAD RECEIVED"
+    );
+
+    console.log(
+      "Time:",
+      new Date().toISOString()
+    );
+
     try {
       const {
         name = "",
@@ -2163,9 +2312,20 @@ app.post(
         conversation = []
       } = req.body || {};
 
-      /*
-       * Keep only valid conversation messages.
-       */
+      console.log(
+        "LEAD CONTACT:",
+        {
+          name,
+          phone:
+            phone
+              ? "[provided]"
+              : "[empty]",
+          email:
+            email
+              ? "[provided]"
+              : "[empty]"
+        }
+      );
 
       const safeConversation =
         Array.isArray(
@@ -2183,32 +2343,73 @@ app.post(
               .slice(-30)
           : [];
 
-      /*
-       * Contact requirement.
-       */
-
       if (
         !phone &&
         !email
       ) {
+        console.log(
+          "LEAD REJECTED: no phone/email"
+        );
+
         return res.status(400).json({
           error:
             "Phone or email is required"
         });
       }
 
-      /*
-       * Extract sales information using AI.
-       */
+      console.log(
+        "LEAD: extracting data with OpenAI..."
+      );
 
-      const leadData =
-        await extractLeadData(
-          safeConversation
+      let leadData = {};
+
+      try {
+        leadData =
+          await extractLeadData(
+            safeConversation
+          );
+
+      } catch (error) {
+        console.error(
+          "LEAD AI EXTRACTION FAILED:",
+          error.message
         );
 
-      /*
-       * Conversation text for email.
-       */
+        /*
+         * Important:
+         * Do NOT block the lead completely if AI
+         * extraction fails.
+         */
+
+        leadData = {
+          language: "",
+          equipment_type: "",
+          brand: "",
+          model: "",
+          year: "",
+          budget: "",
+          emission: "",
+          axle_configuration: "",
+          use_case: "",
+          purchase_timeframe: "",
+          interested_vehicles: [],
+          listing_urls: [],
+          customer_question: "",
+          objections: "",
+          ai_summary:
+            "Lead received. AI extraction failed; manager should review the conversation.",
+          lead_score:
+            "Unknown",
+          stage:
+            "New",
+          manager_action:
+            "Review the conversation and contact the customer."
+        };
+      }
+
+      console.log(
+        "LEAD: AI extraction finished"
+      );
 
       const conversationText =
         safeConversation
@@ -2227,10 +2428,6 @@ app.post(
           })
           .join("\n\n");
 
-      /*
-       * Lead email subject.
-       */
-
       const subject =
         `[Truck Point AI] ${
           leadData.lead_score ||
@@ -2238,6 +2435,9 @@ app.post(
         } lead`;
 
       const interestedVehicles =
+        Array.isArray(
+          leadData.interested_vehicles
+        ) &&
         leadData
           .interested_vehicles
           .length
@@ -2247,6 +2447,9 @@ app.post(
           : "Not specified";
 
       const listingUrls =
+        Array.isArray(
+          leadData.listing_urls
+        ) &&
         leadData
           .listing_urls
           .length
@@ -2254,10 +2457,6 @@ app.post(
               .listing_urls
               .join("\n")
           : "Not specified";
-
-      /*
-       * Plain text email.
-       */
 
       const emailText = `
 
@@ -2363,24 +2562,10 @@ ${conversationText}
 `;
 
       /*
-       * Send email.
-       */
-
-      await transporter.sendMail({
-        from:
-          process.env.SMTP_USER,
-
-        to:
-          process.env.LEAD_TO_EMAIL,
-
-        subject,
-
-        text:
-          emailText
-      });
-
-      /*
-       * Prepare CRM object.
+       * CRM object.
+       *
+       * This object contains the full information for
+       * email and Google Sheets.
        */
 
       const lead = {
@@ -2459,31 +2644,131 @@ ${conversationText}
       };
 
       /*
-       * Send to Google Sheets if configured.
+       * EXACT Google Sheets fields.
        *
-       * This does NOT break the lead if Google Sheets
-       * is temporarily unavailable.
+       * Your spreadsheet has 13 columns:
+       *
+       * 1 Date
+       * 2 Name
+       * 3 Phone
+       * 4 Email
+       * 5 Language
+       * 6 Model
+       * 7 Year
+       * 8 Budget
+       * 9 Axles
+       * 10 Customer question
+       * 11 Manager status
+       * 12 Page URL
+       * 13 AI summary
        */
 
-      const sheetsResult =
-        await sendLeadToGoogleSheets(
-          lead
-        );
+      const googleSheetsLead = {
+        date:
+          lead.date,
+
+        name:
+          lead.name,
+
+        phone:
+          lead.phone,
+
+        email:
+          lead.email,
+
+        language:
+          lead.language,
+
+        model:
+          lead.model ||
+          lead.brand ||
+          "",
+
+        year:
+          lead.year,
+
+        budget:
+          lead.budget,
+
+        axles:
+          lead.axle_configuration,
+
+        customer_question:
+          lead.customer_question,
+
+        manager_status:
+          lead.stage ||
+          "New",
+
+        page_url:
+          lead.page_url,
+
+        ai_summary:
+          lead.ai_summary
+      };
 
       console.log(
-        "NEW AI LEAD:",
-        JSON.stringify(
-          lead,
-          null,
-          2
-        )
+        "LEAD: sending email and Google Sheets in parallel..."
       );
+
+      /*
+       * IMPORTANT:
+       *
+       * Email and Google Sheets are independent.
+       * If one fails, the other can still succeed.
+       *
+       * Neither is allowed to block forever.
+       */
+
+      const [
+        emailResult,
+        sheetsResult
+      ] =
+        await Promise.all([
+          sendLeadEmail({
+            subject,
+            text: emailText
+          }),
+
+          sendLeadToGoogleSheets(
+            googleSheetsLead
+          )
+        ]);
+
+      console.log(
+        "LEAD EMAIL RESULT:",
+        emailResult
+      );
+
+      console.log(
+        "LEAD GOOGLE SHEETS RESULT:",
+        sheetsResult
+      );
+
+      console.log(
+        "NEW AI LEAD CREATED"
+      );
+
+      console.log(
+        "========================================"
+      );
+
+      /*
+       * We always return a response after the
+       * controlled operations above.
+       */
 
       return res.json({
         success: true,
 
         message:
-          "Lead successfully sent",
+          "Lead successfully processed",
+
+        email:
+          emailResult,
+
+        google_sheets:
+          sheetsResult,
 
         lead: {
           ...leadData,
@@ -2491,10 +2776,7 @@ ${conversationText}
           name,
           phone,
           email
-        },
-
-        google_sheets:
-          sheetsResult
+        }
       });
 
     } catch (error) {
@@ -2503,14 +2785,19 @@ ${conversationText}
         error
       );
 
+      console.log(
+        "========================================"
+      );
+
       return res.status(500).json({
+        success: false,
+
         error:
           "Something went wrong while creating the lead."
       });
     }
   }
 );
-
 
 /* =========================================================
    HEALTH
@@ -2543,12 +2830,27 @@ app.get(
             .GOOGLE_SHEETS_WEBHOOK_URL
         ),
 
+      email:
+        Boolean(
+          process.env
+            .SMTP_USER
+        ) &&
+        Boolean(
+          process.env
+            .LEAD_TO_EMAIL
+        ),
+
+      openai:
+        Boolean(
+          process.env
+            .OPENAI_API_KEY
+        ),
+
       sync:
         syncStatus
     });
   }
 );
-
 
 /* =========================================================
    ROOT
@@ -2563,7 +2865,6 @@ app.get(
   }
 );
 
-
 /* =========================================================
    START
 ========================================================= */
@@ -2575,10 +2876,55 @@ app.listen(
       `Truck Point AI server running on port ${PORT}`
     );
 
-    await syncCatalog();
+    console.log(
+      "Starting catalog synchronization..."
+    );
+
+    /*
+     * Store the promise so /api/chat can wait
+     * for the first catalog load.
+     */
+
+    catalogReadyPromise =
+      syncCatalog();
+
+    try {
+      await catalogReadyPromise;
+    } catch (error) {
+      console.error(
+        "INITIAL CATALOG SYNC ERROR:",
+        error.message
+      );
+    }
+
+    console.log(
+      "Initial catalog synchronization finished."
+    );
 
     setInterval(
-      syncCatalog,
+      () => {
+        /*
+         * Do not allow an old sync to be
+         * overwritten by another simultaneous sync.
+         */
+
+        if (
+          syncStatus.started_at &&
+          !syncStatus.finished_at
+        ) {
+          console.log(
+            "Catalog sync already running. Skipping scheduled sync."
+          );
+
+          return;
+        }
+
+        syncStatus.finished_at =
+          null;
+
+        catalogReadyPromise =
+          syncCatalog();
+      },
       30 * 60 * 1000
     );
   }
