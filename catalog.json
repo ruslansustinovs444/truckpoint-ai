@@ -1,0 +1,38 @@
+[
+  {
+    "id": "daf-xf460-2017",
+    "make": "DAF",
+    "model": "XF460",
+    "year": 2017,
+    "price_eur": 12000,
+    "mileage_km": 960000,
+    "engine": "13.0 L",
+    "power_hp": 460,
+    "emission": "Euro 6",
+    "axle_configuration": "4x2",
+    "cab": "SuperSpace",
+    "park_cool": false,
+    "retarder": false,
+    "location": "Latvia",
+    "quantity": 1,
+    "url": "https://www.truck-point.net/page275332709.html"
+  },
+  {
+    "id": "volvo-fh460-2016",
+    "make": "Volvo",
+    "model": "FH460",
+    "year": 2016,
+    "price_eur": 23500,
+    "mileage_km": 1055000,
+    "engine": "13.0 L",
+    "power_hp": 460,
+    "emission": "Euro 6",
+    "axle_configuration": "4x2",
+    "cab": "Globetrotter",
+    "park_cool": true,
+    "retarder": false,
+    "location": "Latvia",
+    "quantity": 1,
+    "url": "https://www.truck-point.net/page274529409.html"
+  }
+]
