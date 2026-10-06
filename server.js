@@ -896,7 +896,7 @@ app.post("/api/chat", async (req, res) => {
       latestUserMessage?.content || "";
 
     const matchingCatalog =
-      searchCatalog(userText);
+  searchCatalog(userText, messages);
 
     const catalogContext =
       buildCatalogContext(
