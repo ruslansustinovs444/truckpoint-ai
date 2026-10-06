@@ -1606,6 +1606,9 @@ Treat these as strong purchase intent:
 
 In such cases, encourage the customer to leave contact details.
 
+When the customer explicitly asks to contact a manager,
+connect them to the manager lead form immediately.
+
 LANGUAGE:
 
 Reply in the language used by the customer.
@@ -1631,31 +1634,53 @@ function detectLeadIntent(text) {
     normalizeSearchText(text);
 
   const strongIntentPatterns = [
+
+    /* =========================
+       ENGLISH
+    ========================= */
+
     /\bi want to buy\b/i,
     /\bi want to purchase\b/i,
     /\bi would like to buy\b/i,
     /\bi am interested in (this|the|a) (truck|tractor|trailer|vehicle)\b/i,
+
     /\bis it available\b/i,
     /\bis this available\b/i,
+
     /\bplease contact me\b/i,
     /\bcontact me\b/i,
     /\bcan you contact me\b/i,
     /\bcall me\b/i,
+    /\bplease call me\b/i,
+
     /\bcan i speak to (a )?manager\b/i,
     /\bspeak to (a )?manager\b/i,
     /\bmanager contact\b/i,
+
+    /\bconnect me with (a )?manager\b/i,
+    /\bput me in touch with (a )?manager\b/i,
+    /\bconnect me to (a )?manager\b/i,
+
     /\bi want to reserve\b/i,
     /\bi want to book\b/i,
     /\bcan i reserve\b/i,
+
     /\bplease send (me )?(the )?documents\b/i,
     /\bsend me the documents\b/i,
     /\bcan you send documents\b/i,
+
     /\bcan you check availability\b/i,
     /\bcheck availability\b/i,
+
     /\bwhat is the final price\b/i,
     /\bfinal price\b/i,
+
     /\bi want to buy within\b/i,
     /\bi plan to buy within\b/i,
+
+    /* =========================
+       RUSSIAN
+    ========================= */
 
     /хочу купить/i,
     /хочу приобрести/i,
@@ -1663,33 +1688,75 @@ function detectLeadIntent(text) {
     /интересует этот грузовик/i,
     /интересует этот тягач/i,
     /интересует эта машина/i,
+    /интересует этот автомобиль/i,
+
     /можно купить/i,
+
     /он в наличии/i,
     /она в наличии/i,
     /есть в наличии/i,
+
     /свяжитесь со мной/i,
-    /позвоните мне/i,
+    /свяжи меня с менеджером/i,
+    /свяжите меня с менеджером/i,
+    /связать меня с менеджером/i,
     /связаться с менеджером/i,
+    /связь с менеджером/i,
     /хочу поговорить с менеджером/i,
+    /хочу связаться с менеджером/i,
+    /соедините с менеджером/i,
+    /соедините меня с менеджером/i,
+
+    /позвоните мне/i,
+    /перезвоните мне/i,
+
     /проверить наличие/i,
+    /узнать наличие/i,
+
     /забронировать/i,
+    /хочу забронировать/i,
+
     /пришлите документы/i,
     /отправьте документы/i,
+    /нужны документы/i,
+
     /финальная цена/i,
+    /окончательная цена/i,
+
     /хочу купить в течение/i,
+    /планирую купить/i,
+
+    /* =========================
+       GERMAN
+    ========================= */
 
     /\bich möchte kaufen\b/i,
     /\bich will kaufen\b/i,
     /\bist es verfügbar\b/i,
     /\bkontaktieren sie mich\b/i,
+    /\bverbinden sie mich mit einem mitarbeiter\b/i,
+    /\bich möchte mit einem mitarbeiter sprechen\b/i,
+    /\bich möchte mit einem manager sprechen\b/i,
+
+    /* =========================
+       POLISH
+    ========================= */
 
     /\bchcę kupić\b/i,
     /\bczy jest dostępny\b/i,
     /\bproszę o kontakt\b/i,
+    /\bpołącz mnie z menedżerem\b/i,
+    /\bchcę porozmawiać z menedżerem\b/i,
+
+    /* =========================
+       LATVIAN
+    ========================= */
 
     /\bgribu iegādāties\b/i,
     /\bvai ir pieejams\b/i,
-    /\blūdzu sazināties\b/i
+    /\blūdzu sazināties\b/i,
+    /\bsavienojiet mani ar vadītāju\b/i,
+    /\bgribu runāt ar vadītāju\b/i
   ];
 
   if (
@@ -1701,13 +1768,19 @@ function detectLeadIntent(text) {
     return true;
   }
 
+  /* =========================
+     BUYING TIMEFRAME
+  ========================= */
+
   const hasBuyingTimeframe =
     /\b(within|in the next|next)\s+\d*\s*(week|weeks|month|months|days)\b/i.test(text) ||
-    /в течение\s+(недели|месяца|двух недель|двух месяцев)/i.test(text);
+    /в течение\s+(недели|месяца|двух недель|двух месяцев)/i.test(text) ||
+    /в ближайшее время/i.test(text) ||
+    /в этом месяце/i.test(text);
 
   const hasVehicleInterest =
     /\b(interested in|like|want|looking to buy)\b/i.test(text) ||
-    /интересует|нравится|хочу купить|хочу взять/i.test(text);
+    /интересует|нравится|хочу купить|хочу взять|хочу приобрести/i.test(text);
 
   if (
     hasBuyingTimeframe &&
@@ -1870,6 +1943,18 @@ ${catalogContext}
           ?.content ||
         "Sorry, I could not generate a response.";
 
+      /*
+       * Check the current message AND recent conversation.
+       *
+       * This means that:
+       *
+       * "свяжите меня с менеджером"
+       *
+       * immediately returns:
+       *
+       * show_lead_form: true
+       */
+
       const conversationForIntent = [
         ...previousConversation,
         {
@@ -1892,6 +1977,11 @@ ${catalogContext}
         detectLeadIntent(
           intentText
         );
+
+      console.log(
+        "LEAD INTENT:",
+        showLeadForm
+      );
 
       return res.json({
         reply,
@@ -2375,12 +2465,6 @@ app.post(
           error.message
         );
 
-        /*
-         * Important:
-         * Do NOT block the lead completely if AI
-         * extraction fails.
-         */
-
         leadData = {
           language: "",
           equipment_type: "",
@@ -2561,13 +2645,6 @@ ${conversationText}
 
 `;
 
-      /*
-       * CRM object.
-       *
-       * This object contains the full information for
-       * email and Google Sheets.
-       */
-
       const lead = {
         date:
           new Date().toISOString(),
@@ -2646,8 +2723,6 @@ ${conversationText}
       /*
        * EXACT Google Sheets fields.
        *
-       * Your spreadsheet has 13 columns:
-       *
        * 1 Date
        * 2 Name
        * 3 Phone
@@ -2711,15 +2786,6 @@ ${conversationText}
         "LEAD: sending email and Google Sheets in parallel..."
       );
 
-      /*
-       * IMPORTANT:
-       *
-       * Email and Google Sheets are independent.
-       * If one fails, the other can still succeed.
-       *
-       * Neither is allowed to block forever.
-       */
-
       const [
         emailResult,
         sheetsResult
@@ -2752,11 +2818,6 @@ ${conversationText}
       console.log(
         "========================================"
       );
-
-      /*
-       * We always return a response after the
-       * controlled operations above.
-       */
 
       return res.json({
         success: true,
@@ -2880,11 +2941,6 @@ app.listen(
       "Starting catalog synchronization..."
     );
 
-    /*
-     * Store the promise so /api/chat can wait
-     * for the first catalog load.
-     */
-
     catalogReadyPromise =
       syncCatalog();
 
@@ -2903,11 +2959,6 @@ app.listen(
 
     setInterval(
       () => {
-        /*
-         * Do not allow an old sync to be
-         * overwritten by another simultaneous sync.
-         */
-
         if (
           syncStatus.started_at &&
           !syncStatus.finished_at
