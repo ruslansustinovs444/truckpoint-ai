@@ -34,7 +34,8 @@ const openai = new OpenAI({
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT || 465),
-  secure: String(process.env.SMTP_SECURE || "true") === "true",
+  secure:
+    String(process.env.SMTP_SECURE || "true") === "true",
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS
@@ -60,7 +61,10 @@ const syncStatus = {
 function absoluteUrl(url) {
   if (!url) return "";
 
-  if (url.startsWith("http://") || url.startsWith("https://")) {
+  if (
+    url.startsWith("http://") ||
+    url.startsWith("https://")
+  ) {
     return url;
   }
 
@@ -80,6 +84,16 @@ function cleanText(value) {
 }
 
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+
 function parsePrice(value) {
   if (!value) return null;
 
@@ -87,18 +101,24 @@ function parsePrice(value) {
     .replace(/\s/g, "")
     .replace(",", ".");
 
-  const match = text.match(/€?\s*([\d.]+)/);
+  const match =
+    text.match(/€?\s*([\d.]+)/);
 
   if (!match) return null;
 
   const number = Number(match[1]);
 
-  return Number.isFinite(number) ? number : null;
+  return Number.isFinite(number)
+    ? number
+    : null;
 }
 
 
 function parseNumber(value) {
-  if (value === null || value === undefined) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
     return null;
   }
 
@@ -106,13 +126,16 @@ function parseNumber(value) {
     .replace(/\s/g, "")
     .replace(",", ".");
 
-  const match = text.match(/-?\d+(?:\.\d+)?/);
+  const match =
+    text.match(/-?\d+(?:\.\d+)?/);
 
   if (!match) return null;
 
   const number = Number(match[0]);
 
-  return Number.isFinite(number) ? number : null;
+  return Number.isFinite(number)
+    ? number
+    : null;
 }
 
 
@@ -129,17 +152,20 @@ function parseSpecs(description) {
     .filter(Boolean);
 
   for (const line of lines) {
-    const separator = line.indexOf(":");
+    const separator =
+      line.indexOf(":");
 
     if (separator === -1) continue;
 
-    const key = line
-      .slice(0, separator)
-      .trim();
+    const key =
+      line
+        .slice(0, separator)
+        .trim();
 
-    const value = line
-      .slice(separator + 1)
-      .trim();
+    const value =
+      line
+        .slice(separator + 1)
+        .trim();
 
     if (!key || !value) continue;
 
@@ -186,13 +212,18 @@ function normalizeSpecs(raw) {
       raw["Horsepower"]
     ) || null;
 
-  if (!specs.power_hp && specs.engine) {
-    const hpMatch = String(specs.engine).match(
-      /(\d+(?:\.\d+)?)\s*HP/i
-    );
+  if (
+    !specs.power_hp &&
+    specs.engine
+  ) {
+    const hpMatch =
+      String(specs.engine).match(
+        /(\d+(?:\.\d+)?)\s*HP/i
+      );
 
     if (hpMatch) {
-      specs.power_hp = Number(hpMatch[1]);
+      specs.power_hp =
+        Number(hpMatch[1]);
     }
   }
 
@@ -238,12 +269,13 @@ function normalizeSpecs(raw) {
 ========================================================= */
 
 async function fetchHtml(url) {
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (compatible; TruckPointAI/1.0)"
-    }
-  });
+  const response =
+    await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; TruckPointAI/1.0)"
+      }
+    });
 
   if (!response.ok) {
     throw new Error(
@@ -259,65 +291,76 @@ async function fetchHtml(url) {
    LIST PAGE PARSER
 ========================================================= */
 
-function parseListPage(html, type) {
-  const $ = cheerio.load(html);
+function parseListPage(
+  html,
+  type
+) {
+  const $ =
+    cheerio.load(html);
 
   const items = [];
 
-  $(".t404__link").each((index, element) => {
-    const link = $(element);
+  $(".t404__link").each(
+    (index, element) => {
+      const link =
+        $(element);
 
-    const href = link.attr("href");
+      const href =
+        link.attr("href");
 
-    if (!href) return;
+      if (!href) return;
 
-    const title =
-      cleanText(
+      const title =
+        cleanText(
+          link
+            .find(".t404__title")
+            .first()
+            .text()
+        ) ||
+        cleanText(
+          link
+            .find(".t404__textwrapper")
+            .first()
+            .text()
+        );
+
+      const priceText =
+        cleanText(
+          link
+            .find(".t404__descr")
+            .first()
+            .text()
+        );
+
+      const price =
+        parsePrice(priceText);
+
+      let image = "";
+
+      const imageElement =
         link
-          .find(".t404__title")
-          .first()
-          .text()
-      ) ||
-      cleanText(
-        link
-          .find(".t404__textwrapper")
-          .first()
-          .text()
-      );
+          .find(".t404__img")
+          .first();
 
-    const priceText =
-      cleanText(
-        link
-          .find(".t404__descr")
-          .first()
-          .text()
-      );
+      if (imageElement.length) {
+        image =
+          imageElement.attr(
+            "data-original"
+          ) ||
+          imageElement.attr("src") ||
+          "";
+      }
 
-    const price = parsePrice(priceText);
-
-    let image = "";
-
-    const imageElement =
-      link
-        .find(".t404__img")
-        .first();
-
-    if (imageElement.length) {
-      image =
-        imageElement.attr("data-original") ||
-        imageElement.attr("src") ||
-        "";
+      items.push({
+        type,
+        title,
+        price_eur: price,
+        url: absoluteUrl(href),
+        image: absoluteUrl(image),
+        details_loaded: false
+      });
     }
-
-    items.push({
-      type,
-      title,
-      price_eur: price,
-      url: absoluteUrl(href),
-      image: absoluteUrl(image),
-      details_loaded: false
-    });
-  });
+  );
 
   return items;
 }
@@ -327,8 +370,12 @@ function parseListPage(html, type) {
    DETAIL PAGE PARSER
 ========================================================= */
 
-function parseDetailPage(html, item) {
-  const $ = cheerio.load(html);
+function parseDetailPage(
+  html,
+  item
+) {
+  const $ =
+    cheerio.load(html);
 
   const title =
     cleanText(
@@ -356,9 +403,11 @@ function parseDetailPage(html, item) {
       .end()
       .text();
 
-  const rawSpecs = parseSpecs(description);
+  const rawSpecs =
+    parseSpecs(description);
 
-  const specs = normalizeSpecs(rawSpecs);
+  const specs =
+    normalizeSpecs(rawSpecs);
 
   /* -----------------------------------------
      Images
@@ -366,35 +415,46 @@ function parseDetailPage(html, item) {
 
   const images = [];
 
-  $(".t-slds__bgimg").each((index, element) => {
-    const el = $(element);
+  $(".t-slds__bgimg").each(
+    (index, element) => {
+      const el =
+        $(element);
 
-    const image =
-      el.attr("data-img-zoom-url") ||
-      el.attr("data-original") ||
-      el.attr("data-image") ||
-      el.attr("style") ||
-      "";
+      const image =
+        el.attr("data-img-zoom-url") ||
+        el.attr("data-original") ||
+        el.attr("data-image") ||
+        el.attr("style") ||
+        "";
 
-    let imageUrl = image;
+      let imageUrl = image;
 
-    const urlMatch =
-      String(image).match(
-        /url\(['"]?([^'")]+)['"]?\)/
-      );
+      const urlMatch =
+        String(image).match(
+          /url\(['"]?([^'")]+)['"]?\)/
+        );
 
-    if (urlMatch) {
-      imageUrl = urlMatch[1];
-    }
+      if (urlMatch) {
+        imageUrl =
+          urlMatch[1];
+      }
 
-    if (imageUrl) {
-      const absolute = absoluteUrl(imageUrl);
+      if (imageUrl) {
+        const absolute =
+          absoluteUrl(imageUrl);
 
-      if (!images.includes(absolute)) {
-        images.push(absolute);
+        if (
+          !images.includes(
+            absolute
+          )
+        ) {
+          images.push(
+            absolute
+          );
+        }
       }
     }
-  });
+  );
 
   /* -----------------------------------------
      Meta description / price fallback
@@ -415,7 +475,8 @@ function parseDetailPage(html, item) {
 
     title,
 
-    price_eur: priceFromPage,
+    price_eur:
+      priceFromPage,
 
     ...specs,
 
@@ -424,7 +485,8 @@ function parseDetailPage(html, item) {
     description_raw:
       cleanText(description),
 
-    details_loaded: true
+    details_loaded:
+      true
   };
 }
 
@@ -435,9 +497,13 @@ function parseDetailPage(html, item) {
 
 async function enrichItem(item) {
   try {
-    const html = await fetchHtml(item.url);
+    const html =
+      await fetchHtml(item.url);
 
-    return parseDetailPage(html, item);
+    return parseDetailPage(
+      html,
+      item
+    );
   } catch (error) {
     console.error(
       `Failed to enrich ${item.url}:`,
@@ -446,8 +512,12 @@ async function enrichItem(item) {
 
     return {
       ...item,
-      details_loaded: false,
-      details_error: error.message
+
+      details_loaded:
+        false,
+
+      details_error:
+        error.message
     };
   }
 }
@@ -457,7 +527,8 @@ async function enrichItems(items) {
   const result = [];
 
   for (const item of items) {
-    const enriched = await enrichItem(item);
+    const enriched =
+      await enrichItem(item);
 
     result.push(enriched);
   }
@@ -474,12 +545,15 @@ async function syncCatalog() {
   syncStatus.started_at =
     new Date().toISOString();
 
-  syncStatus.last_error = null;
+  syncStatus.last_error =
+    null;
 
   try {
     let allItems = [];
 
-    for (const page of CATALOG_PAGES) {
+    for (
+      const page of CATALOG_PAGES
+    ) {
       console.log(
         `Fetching catalog page: ${page.url}`
       );
@@ -497,7 +571,9 @@ async function syncCatalog() {
         `Found ${items.length} ${page.type} listings`
       );
 
-      allItems.push(...items);
+      allItems.push(
+        ...items
+      );
     }
 
     console.log(
@@ -505,21 +581,26 @@ async function syncCatalog() {
     );
 
     const enriched =
-      await enrichItems(allItems);
+      await enrichItems(
+        allItems
+      );
 
-    catalog = enriched;
+    catalog =
+      enriched;
 
     syncStatus.items =
       catalog.length;
 
     syncStatus.trucks =
       catalog.filter(
-        item => item.type === "truck"
+        item =>
+          item.type === "truck"
       ).length;
 
     syncStatus.trailers =
       catalog.filter(
-        item => item.type === "trailer"
+        item =>
+          item.type === "trailer"
       ).length;
 
     syncStatus.finished_at =
@@ -528,6 +609,7 @@ async function syncCatalog() {
     console.log(
       `Catalog sync complete: ${catalog.length} items`
     );
+
   } catch (error) {
     syncStatus.last_error =
       error.message;
@@ -552,7 +634,10 @@ function normalizeSearchText(text) {
     .toLowerCase()
     .replace(/[–—−]/g, "-")
     .replace(/[×]/g, "x")
-    .replace(/[^\p{L}\p{N}.€$£+\-x\s]/giu, " ")
+    .replace(
+      /[^\p{L}\p{N}.€$£+\-x\s]/giu,
+      " "
+    )
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -561,7 +646,10 @@ function normalizeSearchText(text) {
 function tokenize(text) {
   return normalizeSearchText(text)
     .split(/\s+/)
-    .filter(token => token.length >= 2);
+    .filter(
+      token =>
+        token.length >= 2
+    );
 }
 
 
@@ -575,9 +663,13 @@ function extractBudget(text) {
     /(?:€|\$|£)\s*([\d\s.,]+)\s*(?:max|maximum|до)?/i
   ];
 
-  for (const pattern of patterns) {
+  for (
+    const pattern of patterns
+  ) {
     const match =
-      normalized.match(pattern);
+      normalized.match(
+        pattern
+      );
 
     if (!match) continue;
 
@@ -628,14 +720,21 @@ function extractEuroClasses(text) {
 
   return [
     ...new Set(
-      matches.map(value => {
-        const match =
-          value.match(/([0-6])/);
+      matches
+        .map(value => {
+          const match =
+            value.match(
+              /([0-6])/
+            );
 
-        return match
-          ? Number(match[1])
-          : null;
-      }).filter(Boolean)
+          return match
+            ? Number(match[1])
+            : null;
+        })
+        .filter(
+          value =>
+            value !== null
+        )
     )
   ];
 }
@@ -663,20 +762,32 @@ function detectVehicleTypes(text) {
   ];
 
   const hasTruck =
-    truckWords.some(word =>
-      normalized.includes(word)
+    truckWords.some(
+      word =>
+        normalized.includes(
+          word
+        )
     );
 
   const hasTrailer =
-    trailerWords.some(word =>
-      normalized.includes(word)
+    trailerWords.some(
+      word =>
+        normalized.includes(
+          word
+        )
     );
 
-  if (hasTruck && !hasTrailer) {
+  if (
+    hasTruck &&
+    !hasTrailer
+  ) {
     return ["truck"];
   }
 
-  if (hasTrailer && !hasTruck) {
+  if (
+    hasTrailer &&
+    !hasTruck
+  ) {
     return ["trailer"];
   }
 
@@ -707,12 +818,17 @@ function detectBrands(text) {
 
   return brands.filter(
     brand =>
-      normalized.includes(brand)
+      normalized.includes(
+        brand
+      )
   );
 }
 
 
-function hasEuroClass(item, euroClass) {
+function hasEuroClass(
+  item,
+  euroClass
+) {
   if (!item.emission) {
     return false;
   }
@@ -728,7 +844,10 @@ function hasEuroClass(item, euroClass) {
 }
 
 
-function itemMatchesBrand(item, brand) {
+function itemMatchesBrand(
+  item,
+  brand
+) {
   const haystack =
     normalizeSearchText(
       [
@@ -745,13 +864,17 @@ function itemMatchesBrand(item, brand) {
     brand === "mb"
   ) {
     return (
-      haystack.includes("mercedes") ||
+      haystack.includes(
+        "mercedes"
+      ) ||
       haystack.includes("mb")
     );
   }
 
   return haystack.includes(
-    normalizeSearchText(brand)
+    normalizeSearchText(
+      brand
+    )
   );
 }
 
@@ -775,22 +898,23 @@ function itemMatchesNamedVehicle(
 
   const itemTokens =
     tokenize(itemText)
-      .filter(token =>
-        ![
-          "2014",
-          "2015",
-          "2016",
-          "2017",
-          "2018",
-          "2019",
-          "2020",
-          "2021",
-          "2022",
-          "2023",
-          "2024",
-          "2025",
-          "2026"
-        ].includes(token)
+      .filter(
+        token =>
+          ![
+            "2014",
+            "2015",
+            "2016",
+            "2017",
+            "2018",
+            "2019",
+            "2020",
+            "2021",
+            "2022",
+            "2023",
+            "2024",
+            "2025",
+            "2026"
+          ].includes(token)
       );
 
   const importantTokens =
@@ -799,14 +923,18 @@ function itemMatchesNamedVehicle(
         token.length >= 3
     );
 
-  if (!importantTokens.length) {
+  if (
+    !importantTokens.length
+  ) {
     return false;
   }
 
   const matches =
     importantTokens.filter(
       token =>
-        normalized.includes(token)
+        normalized.includes(
+          token
+        )
     );
 
   const year =
@@ -821,7 +949,10 @@ function itemMatchesNamedVehicle(
         2,
         importantTokens.length
       ) &&
-    (year || matches.length >= 2)
+    (
+      year ||
+      matches.length >= 2
+    )
   );
 }
 
@@ -830,7 +961,9 @@ function itemMatchesNamedVehicle(
    COMPARISON DETECTION
 ========================================================= */
 
-function isComparisonRequest(text) {
+function isComparisonRequest(
+  text
+) {
   const normalized =
     normalizeSearchText(text);
 
@@ -852,17 +985,22 @@ function isComparisonRequest(text) {
 
   return words.some(
     word =>
-      normalized.includes(word)
+      normalized.includes(
+        word
+      )
   );
 }
 
 
-function getNamedCatalogItems(text) {
-  return catalog.filter(item =>
-    itemMatchesNamedVehicle(
-      item,
-      text
-    )
+function getNamedCatalogItems(
+  text
+) {
+  return catalog.filter(
+    item =>
+      itemMatchesNamedVehicle(
+        item,
+        text
+      )
   );
 }
 
@@ -888,28 +1026,34 @@ function searchCatalog(
   }
 
   const budget =
-    extractBudget(userText);
+    extractBudget(
+      userText
+    );
 
   const years =
-    extractYear(userText);
+    extractYear(
+      userText
+    );
 
   const euroClasses =
-    extractEuroClasses(userText);
+    extractEuroClasses(
+      userText
+    );
 
   const brands =
-    detectBrands(userText);
+    detectBrands(
+      userText
+    );
 
   const vehicleTypes =
-    detectVehicleTypes(userText);
+    detectVehicleTypes(
+      userText
+    );
 
   const comparison =
-    isComparisonRequest(userText);
-
-  /*
-   * -------------------------------------------------------
-   * 1. Explicitly named vehicles in current message
-   * -------------------------------------------------------
-   */
+    isComparisonRequest(
+      userText
+    );
 
   const explicitlyNamed =
     getNamedCatalogItems(
@@ -917,15 +1061,8 @@ function searchCatalog(
     );
 
   /*
-   * -------------------------------------------------------
-   * 2. Referenced vehicle from previous conversation
-   *
-   * This is important for:
-   *
-   * "Compare it with DAF XF 460 2017"
-   *
-   * We keep the vehicle mentioned immediately before.
-   * -------------------------------------------------------
+   * Previous conversation is used only
+   * for contextual vehicle references.
    */
 
   const conversationText =
@@ -950,12 +1087,7 @@ function searchCatalog(
     );
 
   /*
-   * -------------------------------------------------------
-   * 3. Comparison mode
-   *
-   * Return all explicitly mentioned vehicles
-   * plus the referenced previous vehicle.
-   * -------------------------------------------------------
+   * Comparison
    */
 
   if (comparison) {
@@ -966,30 +1098,29 @@ function searchCatalog(
 
     const unique = [];
 
-    for (const item of comparisonItems) {
+    for (
+      const item of comparisonItems
+    ) {
       if (
         !unique.some(
           existing =>
-            existing.url === item.url
+            existing.url ===
+            item.url
         )
       ) {
         unique.push(item);
       }
     }
 
-    /*
-     * If we found named vehicles,
-     * comparison should use them directly.
-     */
-    if (unique.length >= 2) {
+    if (
+      unique.length >= 2
+    ) {
       return unique;
     }
 
-    /*
-     * If only one explicit vehicle was found,
-     * return it plus other likely candidates.
-     */
-    if (unique.length === 1) {
+    if (
+      unique.length === 1
+    ) {
       const extras =
         catalog
           .filter(
@@ -1007,9 +1138,7 @@ function searchCatalog(
   }
 
   /*
-   * -------------------------------------------------------
-   * 4. General candidate selection
-   * -------------------------------------------------------
+   * General candidate selection
    */
 
   let candidates = [
@@ -1019,7 +1148,10 @@ function searchCatalog(
   /*
    * Vehicle type
    */
-  if (vehicleTypes.length) {
+
+  if (
+    vehicleTypes.length
+  ) {
     candidates =
       candidates.filter(
         item =>
@@ -1032,57 +1164,66 @@ function searchCatalog(
   /*
    * Budget
    */
-  if (budget !== null) {
+
+  if (
+    budget !== null
+  ) {
     candidates =
       candidates.filter(
         item =>
           item.price_eur !== null &&
-          item.price_eur <= budget
+          item.price_eur <=
+            budget
       );
   }
 
   /*
    * Euro class
    */
-  if (euroClasses.length) {
+
+  if (
+    euroClasses.length
+  ) {
     candidates =
-      candidates.filter(item =>
-        euroClasses.some(
-          euro =>
-            hasEuroClass(
-              item,
-              euro
-            )
-        )
+      candidates.filter(
+        item =>
+          euroClasses.some(
+            euro =>
+              hasEuroClass(
+                item,
+                euro
+              )
+          )
       );
   }
 
   /*
-   * Brand logic:
-   *
-   * Volvo OR Scania
-   * rather than Volvo AND Scania.
+   * Brand OR logic
    */
-  if (brands.length) {
+
+  if (
+    brands.length
+  ) {
     candidates =
-      candidates.filter(item =>
-        brands.some(
-          brand =>
-            itemMatchesBrand(
-              item,
-              brand
-            )
-        )
+      candidates.filter(
+        item =>
+          brands.some(
+            brand =>
+              itemMatchesBrand(
+                item,
+                brand
+              )
+          )
       );
   }
 
   /*
    * Year
-   *
-   * If a year is explicitly mentioned,
-   * keep vehicles matching it.
    */
-  if (years.length) {
+
+  if (
+    years.length
+  ) {
     candidates =
       candidates.filter(
         item =>
@@ -1094,15 +1235,15 @@ function searchCatalog(
   }
 
   /*
-   * -------------------------------------------------------
-   * 5. Explicit model query
-   * -------------------------------------------------------
+   * Explicit model
    */
 
   const hasSpecificModel =
     explicitlyNamed.length > 0;
 
-  if (hasSpecificModel) {
+  if (
+    hasSpecificModel
+  ) {
     const specific = [
       ...explicitlyNamed
     ];
@@ -1124,10 +1265,7 @@ function searchCatalog(
   }
 
   /*
-   * -------------------------------------------------------
-   * 6. If there are no structured filters,
-   * use token relevance.
-   * -------------------------------------------------------
+   * Token relevance
    */
 
   const hasStructuredFilters =
@@ -1160,7 +1298,9 @@ function searchCatalog(
 
         let score = 0;
 
-        for (const token of queryTokens) {
+        for (
+          const token of queryTokens
+        ) {
           if (
             text.includes(token)
           ) {
@@ -1185,118 +1325,138 @@ function searchCatalog(
           result.score > 0
       )
       .slice(0, 12)
-      .map(result =>
-        result.item
+      .map(
+        result =>
+          result.item
       );
   }
 
-  /*
-   * Keep result set useful.
-   */
-  return candidates.slice(0, 20);
+  return candidates.slice(
+    0,
+    20
+  );
 }
 
 
 /* =========================================================
-   CATALOG CONTEXT FOR AI
+   CATALOG CONTEXT
 ========================================================= */
 
-function buildCatalogContext(items) {
+function buildCatalogContext(
+  items
+) {
   if (!items.length) {
-    return "No matching catalog vehicles were found.";
+    return (
+      "No matching catalog vehicles were found."
+    );
   }
 
   return items
-    .map((item, index) => {
-      return `
+    .map(
+      (item, index) => {
+        return `
 CATALOG ITEM ${index + 1}
 
-Type: ${item.type || "not specified"}
-Title: ${item.title || "not specified"}
+Type: ${
+          item.type ||
+          "not specified"
+        }
+
+Title: ${
+          item.title ||
+          "not specified"
+        }
+
 Price EUR: ${
-        item.price_eur !== null &&
-        item.price_eur !== undefined
-          ? `€${item.price_eur.toLocaleString("en-US")}`
-          : "not specified"
-      }
+          item.price_eur !== null &&
+          item.price_eur !== undefined
+            ? `€${item.price_eur.toLocaleString(
+                "en-US"
+              )}`
+            : "not specified"
+        }
 
 Make/Model: ${
-        item.make_model || "not specified"
-      }
+          item.make_model ||
+          "not specified"
+        }
 
 Year: ${
-        item.year || "not specified"
-      }
+          item.year ||
+          "not specified"
+        }
 
 Mileage km: ${
-        item.mileage_km !== null &&
-        item.mileage_km !== undefined
-          ? item.mileage_km.toLocaleString(
-              "en-US"
-            )
-          : "not specified"
-      }
+          item.mileage_km !== null &&
+          item.mileage_km !== undefined
+            ? item.mileage_km.toLocaleString(
+                "en-US"
+              )
+            : "not specified"
+        }
 
 Engine: ${
-        item.engine || "not specified"
-      }
+          item.engine ||
+          "not specified"
+        }
 
 Engine liters: ${
-        item.engine_l ??
-        "not specified"
-      }
+          item.engine_l ??
+          "not specified"
+        }
 
 Power HP: ${
-        item.power_hp ??
-        "not specified"
-      }
+          item.power_hp ??
+          "not specified"
+        }
 
 Emission: ${
-        item.emission ||
-        "not specified"
-      }
+          item.emission ||
+          "not specified"
+        }
 
 Axle configuration: ${
-        item.axle_configuration ||
-        "not specified"
-      }
+          item.axle_configuration ||
+          "not specified"
+        }
 
 Cab: ${
-        item.cab ||
-        "not specified"
-      }
+          item.cab ||
+          "not specified"
+        }
 
 Park cool: ${
-        item.park_cool ||
-        "not specified"
-      }
+          item.park_cool ||
+          "not specified"
+        }
 
 Retarder: ${
-        item.retarder ||
-        "not specified"
-      }
+          item.retarder ||
+          "not specified"
+        }
 
 Location: ${
-        item.location ||
-        "not specified"
-      }
+          item.location ||
+          "not specified"
+        }
 
 Quantity: ${
-        item.quantity ??
-        "not specified"
-      }
+          item.quantity ??
+          "not specified"
+        }
 
 Listed URL: ${
-        item.url
-      }
+          item.url
+        }
 
 Details loaded: ${
-        item.details_loaded
-          ? "yes"
-          : "no"
-      }
+          item.details_loaded
+            ? "yes"
+            : "no"
+        }
 `;
-    })
+      }
+    )
     .join("\n");
 }
 
@@ -1343,10 +1503,9 @@ STRICT RULES:
 - your recommendation based on those facts
 
 6. Do not claim that Euro 6 automatically guarantees suitability
-for every European route. Explain that actual requirements can
-depend on destination, regulations and customer operation.
+for every European route.
 
-7. For long-distance transport, you may reasonably compare:
+7. For long-distance transport, you may compare:
 - year
 - mileage
 - engine power
@@ -1361,19 +1520,18 @@ But do not invent mechanical condition or reliability.
 actually present in the catalog context.
 
 9. If the customer asks "compare it with X", understand that
-"it" may refer to a vehicle discussed earlier in the conversation.
+"it" may refer to a vehicle discussed earlier.
 
-10. If the customer gives multiple brand preferences such as:
-"Volvo or Scania", treat that as OR, not AND.
+10. Multiple brand preferences such as:
+"Volvo or Scania"
+mean OR, not AND.
 
 11. If the customer gives a maximum budget, show vehicles at or
 below that budget.
 
-12. If there are several suitable vehicles, show the best
-matches first and explain why.
+12. If several vehicles match, show the strongest matches first.
 
-13. Do not overwhelm the customer with every specification if
-they did not ask for it. Use concise tables or bullet points.
+13. Do not overwhelm the customer with every specification.
 
 14. Ask one useful qualification question at a time.
 
@@ -1396,15 +1554,14 @@ When appropriate, learn:
 
 SALES FLOW:
 
-A good flow is:
-
-1. Understand what the customer needs.
+1. Understand the customer's needs.
 2. Find matching catalog vehicles.
 3. Explain the strongest matches.
 4. Ask one useful follow-up question.
-5. If customer shows serious interest, offer manager contact.
+5. If the customer shows serious buying interest,
+   offer manager contact.
 6. Collect name, phone and email.
-7. Make clear that the information will be passed to the sales team.
+7. Explain that the information will be passed to the sales team.
 
 LEAD HANDOFF:
 
@@ -1418,10 +1575,28 @@ If customer wants:
 - negotiation
 - availability confirmation
 - purchase assistance
+- manager contact
 
 offer to connect them with a manager.
 
-Do not pretend that you personally confirmed those things.
+Do not pretend that you personally confirmed these things.
+
+IMPORTANT SALES INTENT:
+
+Treat these as strong purchase intent:
+- "I want to buy"
+- "I am interested in this truck"
+- "Is it available?"
+- "Can you contact me?"
+- "Please send documents"
+- "Can you check availability?"
+- "I want to reserve it"
+- "I want to purchase within..."
+- "Can I speak to a manager?"
+- "Can you arrange transport?"
+- "What is the final price?"
+
+In such cases, encourage the customer to leave contact details.
 
 LANGUAGE:
 
@@ -1434,22 +1609,79 @@ STYLE:
 Professional, concise, helpful and sales-oriented.
 Do not sound robotic.
 
-IMPORTANT:
-
-The customer may ask broad questions such as:
-"What would you recommend?"
-
-Give a recommendation based only on catalog facts and clearly
-state the trade-off.
-
-Never say something like:
-"lower mileage means longer remaining life"
-as a factual guarantee.
-
-Instead say:
-"the DAF has lower recorded mileage and is newer, which may
-make it more attractive if those factors are important to you."
+Never make guarantees about vehicle condition,
+reliability or remaining service life.
 `;
+}
+
+
+/* =========================================================
+   LEAD INTENT DETECTION
+========================================================= */
+
+function detectLeadIntent(
+  text
+) {
+  const normalized =
+    normalizeSearchText(
+      text
+    );
+
+  const strongIntentWords = [
+    "buy",
+    "purchase",
+    "interested",
+    "available",
+    "availability",
+    "contact me",
+    "manager",
+    "documents",
+    "inspection",
+    "transport",
+    "financing",
+    "reserve",
+    "reservation",
+    "final price",
+    "buying",
+    "purchase within",
+    "want to buy",
+
+    "купить",
+    "покупка",
+    "хочу купить",
+    "интересует",
+    "интересуюсь",
+    "в наличии",
+    "наличие",
+    "свяжитесь",
+    "менеджер",
+    "документы",
+    "осмотр",
+    "доставка",
+    "финансирование",
+    "забронировать",
+    "цена",
+
+    "kaufen",
+    "interessiert",
+    "verfügbar",
+    "manager",
+
+    "kupic",
+    "kupić",
+    "zainteresowany",
+
+    "pirkt",
+    "interesē",
+    "pieejams"
+  ];
+
+  return strongIntentWords.some(
+    word =>
+      normalized.includes(
+        word
+      )
+  );
 }
 
 
@@ -1457,306 +1689,897 @@ make it more attractive if those factors are important to you."
    CHAT ENDPOINT
 ========================================================= */
 
-app.post("/api/chat", async (req, res) => {
-  try {
-    const {
-      message,
-      messages = []
-    } = req.body || {};
+app.post(
+  "/api/chat",
+  async (req, res) => {
+    try {
+      const {
+        message,
+        messages = []
+      } = req.body || {};
 
-    const userText =
-      String(message || "").trim();
+      const userText =
+        String(
+          message || ""
+        ).trim();
 
-    if (!userText) {
-      return res.status(400).json({
-        error: "Message is required"
-      });
-    }
+      if (!userText) {
+        return res.status(400).json({
+          error:
+            "Message is required"
+        });
+      }
 
-    /*
-     * Keep the conversation reasonably small.
-     */
-    const conversation =
-      Array.isArray(messages)
-        ? messages.slice(-12)
-        : [];
+      /*
+       * Keep previous conversation reasonably small.
+       *
+       * IMPORTANT:
+       * The current message is NOT added twice.
+       */
 
-    /*
-     * IMPORTANT:
-     * Search using current message AND conversation
-     * so comparison references work.
-     */
-    const matchingCatalog =
-      searchCatalog(
-        userText,
-        conversation
+      const previousConversation =
+        Array.isArray(messages)
+          ? messages
+              .filter(
+                item =>
+                  item &&
+                  (
+                    item.role === "user" ||
+                    item.role === "assistant"
+                  )
+              )
+              .slice(-12)
+          : [];
+
+      /*
+       * Search current message + previous conversation
+       * so contextual references work.
+       */
+
+      const matchingCatalog =
+        searchCatalog(
+          userText,
+          previousConversation
+        );
+
+      console.log(
+        "CHAT:",
+        userText
       );
 
-    console.log(
-      "CHAT:",
-      userText
-    );
-
-    console.log(
-      "MATCHING CATALOG:",
-      matchingCatalog.map(
-        item => ({
-          title: item.title,
-          price: item.price_eur,
-          url: item.url
-        })
-      )
-    );
-
-    const catalogContext =
-      buildCatalogContext(
-        matchingCatalog
+      console.log(
+        "MATCHING CATALOG:",
+        matchingCatalog.map(
+          item => ({
+            title:
+              item.title,
+            price:
+              item.price_eur,
+            url:
+              item.url
+          })
+        )
       );
 
-    const aiMessages = [
-      {
-        role: "system",
-        content:
-          buildSystemPrompt()
-      },
+      const catalogContext =
+        buildCatalogContext(
+          matchingCatalog
+        );
 
-      {
-        role: "system",
-        content: `
+      const aiMessages = [
+        {
+          role: "system",
+          content:
+            buildSystemPrompt()
+        },
+
+        {
+          role: "system",
+          content: `
 CURRENT CATALOG CONTEXT
 
 ${catalogContext}
 `
-      },
+        },
 
-      ...conversation
-        .filter(
-          item =>
-            item &&
-            (
-              item.role === "user" ||
-              item.role === "assistant"
-            )
-        )
-        .map(item => ({
-          role: item.role,
-          content: String(
+        ...previousConversation.map(
+          item => ({
+            role:
+              item.role,
+            content:
+              String(
+                item.content || ""
+              )
+          })
+        ),
+
+        {
+          role: "user",
+          content:
+            userText
+        }
+      ];
+
+      const completion =
+        await openai.chat.completions.create(
+          {
+            model:
+              process.env.OPENAI_MODEL ||
+              "gpt-5-mini",
+
+            messages:
+              aiMessages
+          }
+        );
+
+      const reply =
+        completion
+          .choices?.[0]
+          ?.message
+          ?.content ||
+        "Sorry, I could not generate a response.";
+
+      /*
+       * Determine whether Tilda should show
+       * the contact form.
+       */
+
+      const conversationForIntent = [
+        ...previousConversation,
+        {
+          role: "user",
+          content: userText
+        }
+      ];
+
+      const intentText =
+        conversationForIntent
+          .map(
+            item =>
+              String(
+                item.content || ""
+              )
+          )
+          .join("\n");
+
+      const showLeadForm =
+        detectLeadIntent(
+          intentText
+        );
+
+      return res.json({
+        reply,
+
+        show_lead_form:
+          showLeadForm,
+
+        catalog:
+          matchingCatalog.map(
+            item => ({
+              title:
+                item.title,
+
+              price_eur:
+                item.price_eur,
+
+              url:
+                item.url
+            })
+          )
+      });
+
+    } catch (error) {
+      console.error(
+        "CHAT ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Something went wrong while processing the request."
+      });
+    }
+  }
+);
+
+
+/* =========================================================
+   AI LEAD EXTRACTION
+========================================================= */
+
+async function extractLeadData(
+  conversation
+) {
+  const conversationText =
+    conversation
+      .map(item => {
+        const role =
+          item.role === "user"
+            ? "CUSTOMER"
+            : "AI";
+
+        return (
+          `${role}: ` +
+          String(
             item.content || ""
           )
-        })),
+        );
+      })
+      .join("\n\n");
 
+  const completion =
+    await openai.chat.completions.create(
       {
-        role: "user",
-        content: userText
-      }
-    ];
-
-    const completion =
-      await openai.chat.completions.create({
         model:
           process.env.OPENAI_MODEL ||
           "gpt-5-mini",
 
-        messages:
-          aiMessages
-      });
+        response_format: {
+          type: "json_object"
+        },
 
-    const reply =
-      completion.choices?.[0]?.message?.content ||
-      "Sorry, I could not generate a response.";
+        messages: [
+          {
+            role: "system",
+            content: `
+You are a CRM lead extraction assistant for Truck Point,
+a commercial truck and trailer sales company.
 
-    return res.json({
-      reply,
-      catalog: matchingCatalog.map(
-        item => ({
-          title: item.title,
-          price_eur: item.price_eur,
-          url: item.url
-        })
-      )
-    });
+Analyze the customer conversation and extract ONLY information
+that is explicitly stated or strongly supported.
 
+NEVER invent missing information.
+
+Return valid JSON with exactly these fields:
+
+{
+  "language": "",
+  "equipment_type": "",
+  "brand": "",
+  "model": "",
+  "year": "",
+  "budget": "",
+  "emission": "",
+  "axle_configuration": "",
+  "use_case": "",
+  "purchase_timeframe": "",
+  "interested_vehicles": [],
+  "listing_urls": [],
+  "customer_question": "",
+  "objections": "",
+  "ai_summary": "",
+  "lead_score": "",
+  "stage": "",
+  "manager_action": ""
+}
+
+Allowed lead_score:
+"Hot", "Warm", "Cold", "Unknown"
+
+Allowed stage:
+"New", "Qualified", "Negotiation", "Won", "Lost"
+
+HOT:
+- customer asks about availability
+- customer wants to buy soon
+- customer asks for manager contact
+- customer asks for documents
+- customer asks about inspection
+- customer asks about transport
+- customer asks about payment
+- customer identifies a specific vehicle
+- customer clearly says they want to buy
+- customer gives strong purchase timeframe
+
+WARM:
+- specific vehicle is discussed
+- budget is discussed
+- customer compares vehicles
+- customer has clear requirements
+- purchase intent exists but is not immediate
+
+COLD:
+- general information only
+- browsing
+- educational questions
+- no clear buying intent
+
+Unknown:
+- insufficient information
+
+Stage:
+
+New:
+- initial inquiry
+
+Qualified:
+- clear equipment requirements,
+  budget, use case or vehicle
+
+Negotiation:
+- price, availability, transport,
+  financing, documents, inspection,
+  payment, manager or purchase details
+
+Won:
+- ONLY if purchase is explicitly completed
+
+Lost:
+- ONLY if customer explicitly says they will not proceed
+
+interested_vehicles:
+Include vehicles the customer clearly asks about,
+selects, or shows interest in.
+
+listing_urls:
+Include ONLY URLs actually present in the conversation.
+
+ai_summary:
+Write a concise 1-3 sentence summary for the sales manager.
+
+manager_action:
+Write the most useful next action for the manager.
+
+If unknown, use an empty string.
+If none, use [].
+
+Return JSON only.
+`
+          },
+
+          {
+            role: "user",
+            content:
+              conversationText
+          }
+        ]
+      }
+    );
+
+  let data = {};
+
+  try {
+    data =
+      JSON.parse(
+        completion
+          .choices?.[0]
+          ?.message
+          ?.content || "{}"
+      );
   } catch (error) {
     console.error(
-      "CHAT ERROR:",
+      "LEAD AI JSON ERROR:",
       error
     );
 
-    return res.status(500).json({
-      error:
-        "Something went wrong while processing the request."
-    });
+    data = {};
   }
-});
+
+  if (
+    !Array.isArray(
+      data.interested_vehicles
+    )
+  ) {
+    data.interested_vehicles =
+      [];
+  }
+
+  if (
+    !Array.isArray(
+      data.listing_urls
+    )
+  ) {
+    data.listing_urls =
+      [];
+  }
+
+  return data;
+}
+
+
+/* =========================================================
+   GOOGLE SHEETS WEBHOOK
+========================================================= */
+
+async function sendLeadToGoogleSheets(
+  lead
+) {
+  const webhookUrl =
+    process.env.GOOGLE_SHEETS_WEBHOOK_URL;
+
+  if (!webhookUrl) {
+    console.log(
+      "Google Sheets webhook is not configured. Skipping."
+    );
+
+    return {
+      success: false,
+      skipped: true
+    };
+  }
+
+  try {
+    const response =
+      await fetch(
+        webhookUrl,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body:
+            JSON.stringify(lead)
+        }
+      );
+
+    const text =
+      await response.text();
+
+    if (!response.ok) {
+      throw new Error(
+        `Google Sheets webhook returned HTTP ${response.status}: ${text}`
+      );
+    }
+
+    console.log(
+      "Lead sent to Google Sheets"
+    );
+
+    return {
+      success: true
+    };
+
+  } catch (error) {
+    console.error(
+      "GOOGLE SHEETS ERROR:",
+      error.message
+    );
+
+    return {
+      success: false,
+      error:
+        error.message
+    };
+  }
+}
 
 
 /* =========================================================
    LEAD ENDPOINT
 ========================================================= */
 
-app.post("/api/lead", async (req, res) => {
-  try {
-    const {
-      name,
-      phone,
-      email,
-      language,
-      equipment_type,
-      brand_model,
-      listing_url,
-      budget,
-      timeframe,
-      use_case,
-      question,
-      objections,
-      stage,
-      ai_summary,
-      manager_status,
-      follow_up
-    } = req.body || {};
+app.post(
+  "/api/lead",
+  async (req, res) => {
+    try {
+      const {
+        name = "",
+        phone = "",
+        email = "",
+        page_url = "",
+        conversation = []
+      } = req.body || {};
 
-    const subject =
-      `Truck Point AI Lead — ${
-        brand_model ||
-        equipment_type ||
-        "New inquiry"
-      }`;
+      /*
+       * Keep only valid conversation messages.
+       */
 
-    const html = `
-      <h2>New Truck Point AI Lead</h2>
+      const safeConversation =
+        Array.isArray(
+          conversation
+        )
+          ? conversation
+              .filter(
+                item =>
+                  item &&
+                  (
+                    item.role === "user" ||
+                    item.role === "assistant"
+                  )
+              )
+              .slice(-30)
+          : [];
 
-      <p><strong>Name:</strong> ${name || "-"}</p>
-      <p><strong>Phone:</strong> ${phone || "-"}</p>
-      <p><strong>Email:</strong> ${email || "-"}</p>
-      <p><strong>Language:</strong> ${language || "-"}</p>
+      /*
+       * Contact requirement.
+       */
 
-      <hr>
+      if (
+        !phone &&
+        !email
+      ) {
+        return res.status(400).json({
+          error:
+            "Phone or email is required"
+        });
+      }
 
-      <p><strong>Equipment type:</strong> ${
-        equipment_type || "-"
-      }</p>
+      /*
+       * Extract sales information using AI.
+       */
 
-      <p><strong>Brand / Model:</strong> ${
-        brand_model || "-"
-      }</p>
+      const leadData =
+        await extractLeadData(
+          safeConversation
+        );
 
-      <p><strong>Listing URL:</strong> ${
-        listing_url || "-"
-      }</p>
+      /*
+       * Conversation text for email.
+       */
 
-      <p><strong>Budget:</strong> ${
-        budget || "-"
-      }</p>
+      const conversationText =
+        safeConversation
+          .map(item => {
+            const role =
+              item.role === "user"
+                ? "CUSTOMER"
+                : "AI";
 
-      <p><strong>Purchase timeframe:</strong> ${
-        timeframe || "-"
-      }</p>
+            return (
+              `${role}: ` +
+              String(
+                item.content || ""
+              )
+            );
+          })
+          .join("\n\n");
 
-      <p><strong>Use case:</strong> ${
-        use_case || "-"
-      }</p>
+      /*
+       * Lead email subject.
+       */
 
-      <hr>
+      const subject =
+        `[Truck Point AI] ${
+          leadData.lead_score ||
+          "New"
+        } lead`;
 
-      <p><strong>Customer question:</strong><br>
-      ${question || "-"}</p>
+      const interestedVehicles =
+        leadData
+          .interested_vehicles
+          .length
+          ? leadData
+              .interested_vehicles
+              .join(", ")
+          : "Not specified";
 
-      <p><strong>Objections:</strong><br>
-      ${objections || "-"}</p>
+      const listingUrls =
+        leadData
+          .listing_urls
+          .length
+          ? leadData
+              .listing_urls
+              .join("\n")
+          : "Not specified";
 
-      <p><strong>Stage:</strong> ${
-        stage || "-"
-      }</p>
+      /*
+       * Plain text email.
+       */
 
-      <p><strong>AI summary:</strong><br>
-      ${ai_summary || "-"}</p>
+      const emailText = `
 
-      <p><strong>Manager status:</strong> ${
-        manager_status || "-"
-      }</p>
+NEW TRUCK POINT AI LEAD
 
-      <p><strong>Follow-up:</strong><br>
-      ${follow_up || "-"}</p>
-    `;
+========================
+CONTACT
+========================
 
-    await transporter.sendMail({
-      from:
-        process.env.SMTP_USER,
+Name:
+${name || "Not provided"}
 
-      to:
-        process.env.LEAD_TO_EMAIL,
+Phone:
+${phone || "Not provided"}
 
-      subject,
+Email:
+${email || "Not provided"}
 
-      html
-    });
+Language:
+${leadData.language || "Not specified"}
 
-    return res.json({
-      success: true
-    });
 
-  } catch (error) {
-    console.error(
-      "LEAD ERROR:",
-      error
-    );
+========================
+REQUIREMENTS
+========================
 
-    return res.status(500).json({
-      error:
-        "Could not send lead."
-    });
+Equipment:
+${leadData.equipment_type || "Not specified"}
+
+Brand:
+${leadData.brand || "Not specified"}
+
+Model:
+${leadData.model || "Not specified"}
+
+Year:
+${leadData.year || "Not specified"}
+
+Budget:
+${leadData.budget || "Not specified"}
+
+Emission:
+${leadData.emission || "Not specified"}
+
+Axle configuration:
+${leadData.axle_configuration || "Not specified"}
+
+Use case:
+${leadData.use_case || "Not specified"}
+
+Purchase timeframe:
+${leadData.purchase_timeframe || "Not specified"}
+
+
+========================
+INTEREST
+========================
+
+Interested vehicles:
+${interestedVehicles}
+
+Listing URLs:
+${listingUrls}
+
+
+========================
+SALES INFORMATION
+========================
+
+Customer question:
+${leadData.customer_question || "Not specified"}
+
+Objections:
+${leadData.objections || "None identified"}
+
+AI summary:
+${leadData.ai_summary || "Not available"}
+
+Lead score:
+${leadData.lead_score || "Unknown"}
+
+Stage:
+${leadData.stage || "New"}
+
+Manager action:
+${leadData.manager_action || "Review the conversation and contact the customer."}
+
+
+========================
+SOURCE
+========================
+
+Page:
+${page_url || "Not provided"}
+
+
+========================
+CONVERSATION
+========================
+
+${conversationText}
+
+`;
+
+      /*
+       * Send email.
+       */
+
+      await transporter.sendMail({
+        from:
+          process.env.SMTP_USER,
+
+        to:
+          process.env.LEAD_TO_EMAIL,
+
+        subject,
+
+        text:
+          emailText
+      });
+
+      /*
+       * Prepare CRM object.
+       */
+
+      const lead = {
+        date:
+          new Date().toISOString(),
+
+        name:
+          name || "",
+
+        phone:
+          phone || "",
+
+        email:
+          email || "",
+
+        language:
+          leadData.language || "",
+
+        equipment_type:
+          leadData.equipment_type || "",
+
+        brand:
+          leadData.brand || "",
+
+        model:
+          leadData.model || "",
+
+        year:
+          leadData.year || "",
+
+        budget:
+          leadData.budget || "",
+
+        emission:
+          leadData.emission || "",
+
+        axle_configuration:
+          leadData.axle_configuration || "",
+
+        use_case:
+          leadData.use_case || "",
+
+        purchase_timeframe:
+          leadData.purchase_timeframe || "",
+
+        interested_vehicles:
+          leadData.interested_vehicles,
+
+        listing_urls:
+          leadData.listing_urls,
+
+        customer_question:
+          leadData.customer_question || "",
+
+        objections:
+          leadData.objections || "",
+
+        ai_summary:
+          leadData.ai_summary || "",
+
+        lead_score:
+          leadData.lead_score || "Unknown",
+
+        stage:
+          leadData.stage || "New",
+
+        manager_action:
+          leadData.manager_action ||
+          "Review the conversation and contact the customer.",
+
+        page_url:
+          page_url || "",
+
+        conversation:
+          safeConversation
+      };
+
+      /*
+       * Send to Google Sheets if configured.
+       *
+       * This does NOT break the lead if Google Sheets
+       * is temporarily unavailable.
+       */
+
+      const sheetsResult =
+        await sendLeadToGoogleSheets(
+          lead
+        );
+
+      console.log(
+        "NEW AI LEAD:",
+        JSON.stringify(
+          lead,
+          null,
+          2
+        )
+      );
+
+      return res.json({
+        success: true,
+
+        message:
+          "Lead successfully sent",
+
+        lead: {
+          ...leadData,
+
+          name,
+          phone,
+          email
+        },
+
+        google_sheets:
+          sheetsResult
+      });
+
+    } catch (error) {
+      console.error(
+        "LEAD ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Something went wrong while creating the lead."
+      });
+    }
   }
-});
+);
 
 
 /* =========================================================
    HEALTH
 ========================================================= */
 
-app.get("/health", (req, res) => {
-  res.json({
-    ok: true,
+app.get(
+  "/health",
+  (req, res) => {
+    res.json({
+      ok: true,
 
-    catalog_items:
-      catalog.length,
+      catalog_items:
+        catalog.length,
 
-    trucks:
-      catalog.filter(
-        item =>
-          item.type === "truck"
-      ).length,
+      trucks:
+        catalog.filter(
+          item =>
+            item.type === "truck"
+        ).length,
 
-    trailers:
-      catalog.filter(
-        item =>
-          item.type === "trailer"
-      ).length,
+      trailers:
+        catalog.filter(
+          item =>
+            item.type === "trailer"
+        ).length,
 
-    sync: syncStatus
-  });
-});
+      google_sheets:
+        Boolean(
+          process.env
+            .GOOGLE_SHEETS_WEBHOOK_URL
+        ),
+
+      sync:
+        syncStatus
+    });
+  }
+);
 
 
-app.get("/", (req, res) => {
-  res.send(
-    "Truck Point AI backend is running."
-  );
-});
+/* =========================================================
+   ROOT
+========================================================= */
+
+app.get(
+  "/",
+  (req, res) => {
+    res.send(
+      "Truck Point AI backend is running."
+    );
+  }
+);
 
 
 /* =========================================================
    START
 ========================================================= */
 
-app.listen(PORT, async () => {
-  console.log(
-    `Truck Point AI server running on port ${PORT}`
-  );
+app.listen(
+  PORT,
+  async () => {
+    console.log(
+      `Truck Point AI server running on port ${PORT}`
+    );
 
-  await syncCatalog();
+    await syncCatalog();
 
-  setInterval(
-    syncCatalog,
-    30 * 60 * 1000
-  );
-});
+    setInterval(
+      syncCatalog,
+      30 * 60 * 1000
+    );
+  }
+);
