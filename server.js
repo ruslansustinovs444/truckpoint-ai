@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import OpenAI from "openai";
 import nodemailer from "nodemailer";
+import fs from "fs";
 
 const app = express();
 
@@ -20,12 +21,32 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+const catalog = JSON.parse(
+  fs.readFileSync("./catalog.json", "utf8")
+);
 
 /* =========================================
    TRUCK POINT — AI SALES CONSULTANT
 ========================================= */
 
-const SYSTEM_PROMPT = `
+const SYSTEM_PROMPT = КАТАЛОГ TRUCK POINT:
+
+Ниже находятся реальные автомобили из каталога компании.
+Используй только эти данные при ответах о конкретных автомобилях.
+
+Если автомобиля нет в каталоге:
+- не придумывай его;
+- скажи, что сейчас он не найден в доступном каталоге;
+- предложи передать запрос менеджеру.
+
+Если клиент спрашивает цену, наличие или характеристики,
+используй только данные каталога.
+
+Если клиент спрашивает о машине,
+по возможности указывай ссылку на её объявление.
+
+ДАННЫЕ КАТАЛОГА:
+${JSON.stringify(catalog, null, 2)}`
 
 Ты — AI-консультант компании Truck Point.
 
