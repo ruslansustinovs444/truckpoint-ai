@@ -26,6 +26,7 @@ const CATALOG_PAGES = {
 };
 
 let catalog = [];
+
 let syncStatus = {
   running: false,
   last_started_at: null,
@@ -48,6 +49,7 @@ function absoluteUrl(url) {
   }
 }
 
+
 function cleanText(value) {
   return String(value || "")
     .replace(/\u00a0/g, " ")
@@ -55,10 +57,13 @@ function cleanText(value) {
     .trim();
 }
 
+
 function parsePrice(value) {
   if (!value) return null;
 
-  const match = String(value).replace(/\s/g, "").match(/€?([\d,.]+)/);
+  const match = String(value)
+    .replace(/\s/g, "")
+    .match(/€?([\d,.]+)/);
 
   if (!match) return null;
 
@@ -68,13 +73,18 @@ function parsePrice(value) {
 
   const parsed = Number(number);
 
-  return Number.isFinite(parsed) ? parsed : null;
+  return Number.isFinite(parsed)
+    ? parsed
+    : null;
 }
+
 
 function parseNumber(value) {
   if (!value) return null;
 
-  const match = String(value).replace(/\s/g, "").match(/[\d,.]+/);
+  const match = String(value)
+    .replace(/\s/g, "")
+    .match(/[\d,.]+/);
 
   if (!match) return null;
 
@@ -84,8 +94,11 @@ function parseNumber(value) {
 
   const parsed = Number(normalized);
 
-  return Number.isFinite(parsed) ? parsed : null;
+  return Number.isFinite(parsed)
+    ? parsed
+    : null;
 }
+
 
 function parseSpecs(description) {
   const result = {};
@@ -100,8 +113,13 @@ function parseSpecs(description) {
 
     if (separator === -1) continue;
 
-    const key = cleanText(line.slice(0, separator));
-    const value = cleanText(line.slice(separator + 1));
+    const key = cleanText(
+      line.slice(0, separator)
+    );
+
+    const value = cleanText(
+      line.slice(separator + 1)
+    );
 
     if (key && value) {
       result[key] = value;
@@ -110,6 +128,7 @@ function parseSpecs(description) {
 
   return result;
 }
+
 
 function normalizeSpecs(raw) {
   const result = {};
@@ -133,12 +152,15 @@ function normalizeSpecs(raw) {
     null;
 
   const engineLiters =
-    engineText ? parseNumber(engineText) : null;
+    engineText
+      ? parseNumber(engineText)
+      : null;
 
   let powerHp = null;
 
   if (engineText) {
-    const hpMatch = engineText.match(/(\d+)\s*HP/i);
+    const hpMatch =
+      engineText.match(/(\d+)\s*HP/i);
 
     if (hpMatch) {
       powerHp = Number(hpMatch[1]);
@@ -155,15 +177,32 @@ function normalizeSpecs(raw) {
   result.engine = engineText;
   result.engine_l = engineLiters;
   result.power_hp = powerHp;
-  result.emission = raw["Emission"] || null;
+
+  result.emission =
+    raw["Emission"] ||
+    null;
+
   result.axle_configuration =
     raw["Axle Configuration"] ||
     raw["Axle configuration"] ||
     null;
-  result.cab = raw["Cab"] || null;
-  result.park_cool = raw["Park cool"] || null;
-  result.retarder = raw["Retarder"] || null;
-  result.location = raw["Location"] || null;
+
+  result.cab =
+    raw["Cab"] ||
+    null;
+
+  result.park_cool =
+    raw["Park cool"] ||
+    null;
+
+  result.retarder =
+    raw["Retarder"] ||
+    null;
+
+  result.location =
+    raw["Location"] ||
+    null;
+
   result.quantity = quantity;
 
   return result;
@@ -183,7 +222,9 @@ async function fetchHtml(url) {
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status} for ${url}`);
+    throw new Error(
+      `HTTP ${response.status} for ${url}`
+    );
   }
 
   return await response.text();
@@ -194,46 +235,67 @@ async function fetchHtml(url) {
 // PARSE LIST PAGE
 // ============================================================
 
-function parseListPage(html, type, sourcePage) {
+function parseListPage(
+  html,
+  type,
+  sourcePage
+) {
   const $ = cheerio.load(html);
 
   const items = [];
 
-  $(".t404__link").each((index, element) => {
-    const link = $(element);
+  $(".t404__link").each(
+    (index, element) => {
+      const link = $(element);
 
-    const href = link.attr("href");
+      const href =
+        link.attr("href");
 
-    if (!href) return;
+      if (!href) return;
 
-    const url = absoluteUrl(href);
+      const url =
+        absoluteUrl(href);
 
-    const title = cleanText(
-      link.find(".t404__title").text()
-    );
+      const title =
+        cleanText(
+          link
+            .find(".t404__title")
+            .text()
+        );
 
-    const priceText = cleanText(
-      link.find(".t404__descr").text()
-    );
+      const priceText =
+        cleanText(
+          link
+            .find(".t404__descr")
+            .text()
+        );
 
-    const imageElement = link.find(".t404__img").first();
+      const imageElement =
+        link
+          .find(".t404__img")
+          .first();
 
-    const image =
-      imageElement.attr("data-original") ||
-      imageElement.attr("src") ||
-      null;
+      const image =
+        imageElement.attr(
+          "data-original"
+        ) ||
+        imageElement.attr("src") ||
+        null;
 
-    items.push({
-      type,
-      title,
-      price_text: priceText,
-      price_eur: parsePrice(priceText),
-      url,
-      image: absoluteUrl(image),
-      source_page: sourcePage,
-      details_loaded: false
-    });
-  });
+      items.push({
+        type,
+        title,
+        price_text: priceText,
+        price_eur:
+          parsePrice(priceText),
+        url,
+        image:
+          absoluteUrl(image),
+        source_page: sourcePage,
+        details_loaded: false
+      });
+    }
+  );
 
   return items;
 }
@@ -243,88 +305,168 @@ function parseListPage(html, type, sourcePage) {
 // PARSE DETAIL PAGE
 // ============================================================
 
-function parseDetailPage(html, item) {
+function parseDetailPage(
+  html,
+  item
+) {
   const $ = cheerio.load(html);
 
   const title =
     cleanText(
-      $(".t764__title.js-product-name").first().text()
+      $(".t764__title.js-product-name")
+        .first()
+        .text()
     ) ||
-    cleanText($("title").first().text()) ||
+    cleanText(
+      $("title")
+        .first()
+        .text()
+    ) ||
     item.title;
 
+
+  // ----------------------------------------------------------
+  // DESCRIPTION
+  // ----------------------------------------------------------
+
+  const descriptionElement =
+    $(".t764__descr.field").first().length
+      ? $(".t764__descr.field").first()
+      : $(".t764__descr").first();
+
+
   const description =
-  descriptionElement
-    .clone()
-    .find("br")
-    .replaceWith("\n")
-    .end()
-    .text();
+    descriptionElement
+      .clone()
+      .find("br")
+      .replaceWith("\n")
+      .end()
+      .text();
 
-const rawSpecs = parseSpecs(description);
+
+  // ----------------------------------------------------------
+  // SPECS
+  // ----------------------------------------------------------
+
+  const rawSpecs =
+    parseSpecs(description);
+
+
+  // ----------------------------------------------------------
+  // TEMPORARY DEBUG
+  // ----------------------------------------------------------
+
   if (
-  item.url &&
-  item.url.includes("page258103603.html")
-) {
-  console.log(
-    "DEBUG MB ACTROS 1845 2014 RAW DESCRIPTION:",
-    JSON.stringify(description)
-  );
+    item.url &&
+    item.url.includes(
+      "page258103603.html"
+    )
+  ) {
+    console.log(
+      "DEBUG MB ACTROS 1845 2014 DESCRIPTION ELEMENT LENGTH:",
+      descriptionElement.length
+    );
 
-  console.log(
-    "DEBUG MB ACTROS 1845 2014 SPECS:",
-    JSON.stringify(rawSpecs)
-  );
-}
-  const specs = normalizeSpecs(rawSpecs);
+    console.log(
+      "DEBUG MB ACTROS 1845 2014 RAW DESCRIPTION:",
+      JSON.stringify(description)
+    );
+
+    console.log(
+      "DEBUG MB ACTROS 1845 2014 SPECS:",
+      JSON.stringify(rawSpecs)
+    );
+  }
+
+
+  const specs =
+    normalizeSpecs(rawSpecs);
+
+
+  // ----------------------------------------------------------
+  // IMAGES
+  // ----------------------------------------------------------
 
   const images = [];
 
-  $(".t-slds__bgimg").each((index, element) => {
-    const imageElement = $(element);
+  $(".t-slds__bgimg").each(
+    (index, element) => {
+      const imageElement =
+        $(element);
 
-    const image =
-      imageElement.attr("data-original") ||
-      imageElement.attr("data-img-zoom-url");
+      const image =
+        imageElement.attr(
+          "data-original"
+        ) ||
+        imageElement.attr(
+          "data-img-zoom-url"
+        );
 
-    if (image) {
-      const absolute = absoluteUrl(image);
+      if (image) {
+        const absolute =
+          absoluteUrl(image);
 
-      if (absolute && !images.includes(absolute)) {
-        images.push(absolute);
+        if (
+          absolute &&
+          !images.includes(absolute)
+        ) {
+          images.push(absolute);
+        }
       }
     }
-  });
+  );
+
 
   const ogImage =
-    $("meta[property='og:image']").attr("content");
+    $("meta[property='og:image']")
+      .attr("content");
+
 
   if (ogImage) {
-    const absolute = absoluteUrl(ogImage);
+    const absolute =
+      absoluteUrl(ogImage);
 
-    if (absolute && !images.includes(absolute)) {
+    if (
+      absolute &&
+      !images.includes(absolute)
+    ) {
       images.unshift(absolute);
     }
   }
 
+
+  // ----------------------------------------------------------
+  // META DESCRIPTION / PRICE
+  // ----------------------------------------------------------
+
   const metaDescription =
-    $("meta[name='description']").attr("content") || "";
+    $("meta[name='description']")
+      .attr("content") || "";
+
 
   const priceFromPage =
     parsePrice(metaDescription) ||
     item.price_eur;
 
+
+  // ----------------------------------------------------------
+  // RETURN ITEM
+  // ----------------------------------------------------------
+
   return {
     ...item,
 
     title,
-    price_eur: priceFromPage,
+
+    price_eur:
+      priceFromPage,
 
     ...specs,
 
     images,
 
-    description_raw: cleanText(description),
+    description_raw:
+      cleanText(description),
 
     details_loaded: true
   };
@@ -337,22 +479,28 @@ const rawSpecs = parseSpecs(description);
 
 async function enrichItem(item) {
   try {
-    const html = await fetchHtml(item.url);
+    const html =
+      await fetchHtml(item.url);
 
-    return parseDetailPage(html, item);
+    return parseDetailPage(
+      html,
+      item
+    );
+
   } catch (error) {
+
     console.error(
       `Catalog detail error: ${item.url}`,
       error.message
     );
 
-    // ВАЖНО:
-    // Если карточка не загрузилась, не удаляем ее.
-    // Оставляем только проверенные данные со страницы списка.
     return {
       ...item,
+
       details_loaded: false,
-      details_error: error.message
+
+      details_error:
+        error.message
     };
   }
 }
@@ -362,20 +510,33 @@ async function enrichItem(item) {
 // CONCURRENCY
 // ============================================================
 
-async function enrichItems(items, concurrency = 5) {
-  const result = new Array(items.length);
+async function enrichItems(
+  items,
+  concurrency = 5
+) {
+  const result =
+    new Array(items.length);
 
   let cursor = 0;
 
-  async function worker() {
-    while (true) {
-      const index = cursor++;
 
-      if (index >= items.length) {
+  async function worker() {
+
+    while (true) {
+
+      const index =
+        cursor++;
+
+      if (
+        index >= items.length
+      ) {
         return;
       }
 
-      result[index] = await enrichItem(items[index]);
+      result[index] =
+        await enrichItem(
+          items[index]
+        );
 
       console.log(
         `Catalog: ${index + 1}/${items.length} processed`
@@ -383,17 +544,28 @@ async function enrichItems(items, concurrency = 5) {
     }
   }
 
+
   const workers = [];
+
 
   for (
     let i = 0;
-    i < Math.min(concurrency, items.length);
+    i < Math.min(
+      concurrency,
+      items.length
+    );
     i++
   ) {
-    workers.push(worker());
+    workers.push(
+      worker()
+    );
   }
 
-  await Promise.all(workers);
+
+  await Promise.all(
+    workers
+  );
+
 
   return result;
 }
@@ -404,96 +576,159 @@ async function enrichItems(items, concurrency = 5) {
 // ============================================================
 
 async function syncCatalog() {
+
   if (syncStatus.running) {
-    console.log("Catalog sync already running");
+
+    console.log(
+      "Catalog sync already running"
+    );
+
     return;
   }
 
-  syncStatus.running = true;
-  syncStatus.last_started_at = new Date().toISOString();
-  syncStatus.last_error = null;
 
-  console.log("====================================");
-  console.log("Truck Point catalog sync started");
-  console.log("====================================");
+  syncStatus.running =
+    true;
+
+  syncStatus.last_started_at =
+    new Date().toISOString();
+
+  syncStatus.last_error =
+    null;
+
+
+  console.log(
+    "===================================="
+  );
+
+  console.log(
+    "Truck Point catalog sync started"
+  );
+
+  console.log(
+    "===================================="
+  );
+
 
   try {
+
     const allItems = [];
 
-    // ----------------------------
+
+    // --------------------------------------------------------
     // TRUCKS
-    // ----------------------------
+    // --------------------------------------------------------
 
     const trucksHtml =
-      await fetchHtml(CATALOG_PAGES.truck);
+      await fetchHtml(
+        CATALOG_PAGES.truck
+      );
 
-    const trucks = parseListPage(
-      trucksHtml,
-      "truck",
-      CATALOG_PAGES.truck
-    );
+
+    const trucks =
+      parseListPage(
+        trucksHtml,
+        "truck",
+        CATALOG_PAGES.truck
+      );
+
 
     console.log(
       `Found ${trucks.length} trucks`
     );
 
-    allItems.push(...trucks);
+
+    allItems.push(
+      ...trucks
+    );
 
 
-    // ----------------------------
+    // --------------------------------------------------------
     // TRAILERS
-    // ----------------------------
+    // --------------------------------------------------------
 
     const trailersHtml =
-      await fetchHtml(CATALOG_PAGES.trailer);
+      await fetchHtml(
+        CATALOG_PAGES.trailer
+      );
 
-    const trailers = parseListPage(
-      trailersHtml,
-      "trailer",
-      CATALOG_PAGES.trailer
-    );
+
+    const trailers =
+      parseListPage(
+        trailersHtml,
+        "trailer",
+        CATALOG_PAGES.trailer
+      );
+
 
     console.log(
       `Found ${trailers.length} trailers`
     );
 
-    allItems.push(...trailers);
+
+    allItems.push(
+      ...trailers
+    );
 
 
-    // ----------------------------
+    // --------------------------------------------------------
     // DETAILS
-    // ----------------------------
+    // --------------------------------------------------------
 
     const enriched =
-      await enrichItems(allItems, 5);
+      await enrichItems(
+        allItems,
+        5
+      );
+
 
     const syncedAt =
       new Date().toISOString();
 
-    catalog = enriched.map(item => ({
-      ...item,
-      last_synced_at: syncedAt
-    }));
 
-    syncStatus.last_finished_at = syncedAt;
+    catalog =
+      enriched.map(
+        item => ({
+          ...item,
+          last_synced_at:
+            syncedAt
+        })
+      );
 
-    console.log("====================================");
+
+    syncStatus.last_finished_at =
+      syncedAt;
+
+
+    console.log(
+      "===================================="
+    );
+
     console.log(
       `Catalog sync finished: ${catalog.length} items`
     );
-    console.log("====================================");
+
+    console.log(
+      "===================================="
+    );
+
 
   } catch (error) {
+
     console.error(
       "Catalog sync failed:",
       error
     );
 
+
     syncStatus.last_error =
       error.message;
 
+
   } finally {
-    syncStatus.running = false;
+
+    syncStatus.running =
+      false;
   }
 }
 
@@ -502,135 +737,233 @@ async function syncCatalog() {
 // CATALOG SEARCH
 // ============================================================
 
-function searchCatalog(message, conversation = []) {
-  const text = String(message || "").toLowerCase();
+function searchCatalog(
+  message,
+  conversation = []
+) {
 
-  let results = [...catalog];
+  const text =
+    String(message || "")
+      .toLowerCase();
 
-  // --------------------------------------------------
-  // 1. Если пользователь ссылается на конкретный
-  // автомобиль из предыдущего сообщения
-  // --------------------------------------------------
 
-  const previousAssistantText = conversation
-    .filter(message => message?.role === "assistant")
-    .map(message => String(message.content || ""))
-    .join("\n")
-    .toLowerCase();
+  let results =
+    [...catalog];
 
-  // Ищем упоминания автомобилей из каталога
-  // в текущем сообщении и предыдущем ответе AI.
-  const candidateItems = catalog.filter(item => {
-    const title = String(item.title || "").toLowerCase();
-    const url = String(item.url || "").toLowerCase();
 
-    const price =
-      item.price_eur !== null &&
-      item.price_eur !== undefined
-        ? String(item.price_eur)
-        : "";
+  // ----------------------------------------------------------
+  // PREVIOUS ASSISTANT MESSAGES
+  // ----------------------------------------------------------
 
-    const titleWords = title
-      .split(/\s+/)
-      .filter(word => word.length >= 3);
+  const previousAssistantText =
+    conversation
+      .filter(
+        message =>
+          message?.role ===
+          "assistant"
+      )
+      .map(
+        message =>
+          String(
+            message.content || ""
+          )
+      )
+      .join("\n")
+      .toLowerCase();
 
-    const titleMatch =
-      title &&
-      titleWords.length > 0 &&
-      titleWords.filter(word => text.includes(word)).length >=
-        Math.min(2, titleWords.length);
 
-    const urlMatch =
-      url && text.includes(url);
+  // ----------------------------------------------------------
+  // FIND SPECIFIC VEHICLE
+  // ----------------------------------------------------------
 
-    const priceMatch =
-      price &&
-      (
-        text.includes(price) ||
-        text.includes(`€${price}`) ||
-        text.includes(`€ ${price}`)
+  const candidateItems =
+    catalog.filter(item => {
+
+      const title =
+        String(
+          item.title || ""
+        ).toLowerCase();
+
+
+      const url =
+        String(
+          item.url || ""
+        ).toLowerCase();
+
+
+      const price =
+        item.price_eur !== null &&
+        item.price_eur !== undefined
+          ? String(
+              item.price_eur
+            )
+          : "";
+
+
+      const titleWords =
+        title
+          .split(/\s+/)
+          .filter(
+            word =>
+              word.length >= 3
+          );
+
+
+      const titleMatch =
+        title &&
+        titleWords.length > 0 &&
+        titleWords.filter(
+          word =>
+            text.includes(word)
+        ).length >=
+          Math.min(
+            2,
+            titleWords.length
+          );
+
+
+      const urlMatch =
+        url &&
+        text.includes(url);
+
+
+      const priceMatch =
+        price &&
+        (
+          text.includes(price) ||
+          text.includes(
+            `€${price}`
+          ) ||
+          text.includes(
+            `€ ${price}`
+          )
+        );
+
+
+      return (
+        titleMatch ||
+        urlMatch ||
+        priceMatch
       );
+    });
 
-    return titleMatch || urlMatch || priceMatch;
-  });
 
-  // Если найден конкретный автомобиль,
-  // возвращаем именно его.
-  if (candidateItems.length > 0) {
+  if (
+    candidateItems.length > 0
+  ) {
     return candidateItems;
   }
 
-  // --------------------------------------------------
-  // 2. Если пользователь говорит "this truck",
-  // "этот грузовик", "этот автомобиль" и т.п.,
-  // ищем последний автомобиль, который AI показывал
-  // в предыдущем сообщении.
-  // --------------------------------------------------
+
+  // ----------------------------------------------------------
+  // REFERENCES TO PREVIOUS VEHICLE
+  // ----------------------------------------------------------
 
   const refersToPreviousVehicle =
     /this truck|this vehicle|this tractor|this one|that truck|that vehicle|that one|этот тягач|этот грузовик|этот автомобиль|этот|эту машину|этой машине|данный автомобиль|тот тягач|тот грузовик/i.test(
       text
     );
 
+
   if (
     refersToPreviousVehicle &&
     previousAssistantText
   ) {
-    const previousMatches = catalog.filter(item => {
-      const title =
-        String(item.title || "").toLowerCase();
 
-      const url =
-        String(item.url || "").toLowerCase();
+    const previousMatches =
+      catalog.filter(
+        item => {
 
-      return (
-        previousAssistantText.includes(title) ||
-        previousAssistantText.includes(url)
+          const title =
+            String(
+              item.title || ""
+            ).toLowerCase();
+
+
+          const url =
+            String(
+              item.url || ""
+            ).toLowerCase();
+
+
+          return (
+            previousAssistantText.includes(
+              title
+            ) ||
+            previousAssistantText.includes(
+              url
+            )
+          );
+        }
       );
-    });
 
-    if (previousMatches.length > 0) {
-      // Берём последний совпавший автомобиль,
-      // чтобы не вернуть весь список.
+
+    if (
+      previousMatches.length > 0
+    ) {
+
       return [
-        previousMatches[previousMatches.length - 1]
+        previousMatches[
+          previousMatches.length - 1
+        ]
       ];
     }
   }
 
-  // --------------------------------------------------
-  // 3. TYPE
-  // --------------------------------------------------
+
+  // ----------------------------------------------------------
+  // TYPE
+  // ----------------------------------------------------------
 
   const asksTrailer =
     /trailer|trailers|semi-trailer|semi trailer|прицеп|полуприцеп|прицепы/i.test(
       text
     );
 
+
   const asksTruck =
     /truck|trucks|tractor|tractor unit|тягач|тягачи|грузовик/i.test(
       text
     );
 
-  if (asksTrailer && !asksTruck) {
-    results = results.filter(
-      item => item.type === "trailer"
-    );
+
+  if (
+    asksTrailer &&
+    !asksTruck
+  ) {
+
+    results =
+      results.filter(
+        item =>
+          item.type ===
+          "trailer"
+      );
   }
 
-  if (asksTruck && !asksTrailer) {
-    results = results.filter(
-      item => item.type === "truck"
-    );
+
+  if (
+    asksTruck &&
+    !asksTrailer
+  ) {
+
+    results =
+      results.filter(
+        item =>
+          item.type ===
+          "truck"
+      );
   }
 
-  // --------------------------------------------------
-  // 4. BUDGET
-  // --------------------------------------------------
+
+  // ----------------------------------------------------------
+  // BUDGET
+  // ----------------------------------------------------------
 
   let maxPrice = null;
 
+
   const patterns = [
+
     /(?:under|below|less than|max(?:imum)?|up to)\s*€?\s*([\d\s,.]+)\s*(?:eur|€)?/i,
 
     /(?:до|не дороже|максимум|бюджет)\s*€?\s*([\d\s,.]+)\s*(?:евро|eur|€)?/i,
@@ -638,30 +971,50 @@ function searchCatalog(message, conversation = []) {
     /€\s*([\d\s,.]+)\s*(?:eur)?/i,
 
     /([\d\s,.]+)\s*(?:eur|€|евро)/i
+
   ];
 
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
+
+  for (
+    const pattern of patterns
+  ) {
+
+    const match =
+      text.match(pattern);
+
 
     if (match) {
-      maxPrice = parseNumber(match[1]);
+
+      maxPrice =
+        parseNumber(
+          match[1]
+        );
+
       break;
     }
   }
 
-  if (maxPrice !== null) {
-    results = results.filter(
-      item =>
-        item.price_eur !== null &&
-        item.price_eur <= maxPrice
-    );
+
+  if (
+    maxPrice !== null
+  ) {
+
+    results =
+      results.filter(
+        item =>
+          item.price_eur !== null &&
+          item.price_eur <=
+            maxPrice
+      );
   }
 
-  // --------------------------------------------------
-  // 5. BRAND
-  // --------------------------------------------------
+
+  // ----------------------------------------------------------
+  // BRAND
+  // ----------------------------------------------------------
 
   const brands = [
+
     "daf",
     "volvo",
     "scania",
@@ -675,44 +1028,78 @@ function searchCatalog(message, conversation = []) {
     "krone",
     "kogel",
     "wielton"
+
   ];
 
+
   const detectedBrands =
-    brands.filter(brand =>
-      text.includes(brand)
+    brands.filter(
+      brand =>
+        text.includes(
+          brand
+        )
     );
 
-  if (detectedBrands.length) {
-    results = results.filter(item => {
-      const haystack = [
-        item.title,
-        item.make_model,
-        item.description_raw
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
 
-      return detectedBrands.some(
-        brand => haystack.includes(brand)
+  if (
+    detectedBrands.length
+  ) {
+
+    results =
+      results.filter(
+        item => {
+
+          const haystack = [
+
+            item.title,
+            item.make_model,
+            item.description_raw
+
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+
+
+          return detectedBrands.some(
+            brand =>
+              haystack.includes(
+                brand
+              )
+          );
+        }
       );
-    });
   }
 
-  // --------------------------------------------------
-  // 6. YEAR
-  // --------------------------------------------------
+
+  // ----------------------------------------------------------
+  // YEAR
+  // ----------------------------------------------------------
 
   const yearMatch =
-    text.match(/\b(20\d{2})\b/);
-
-  if (yearMatch) {
-    const year = Number(yearMatch[1]);
-
-    results = results.filter(
-      item => item.year === year
+    text.match(
+      /\b(20\d{2})\b/
     );
+
+
+  if (
+    yearMatch
+  ) {
+
+    const year =
+      Number(
+        yearMatch[1]
+      );
+
+
+    results =
+      results.filter(
+        item =>
+          item.year ===
+          year
+      );
   }
+
 
   return results;
 }
@@ -722,21 +1109,34 @@ function searchCatalog(message, conversation = []) {
 // AI CATALOG CONTEXT
 // ============================================================
 
-function buildCatalogContext(items) {
-  if (!items.length) {
-    return "No matching catalog items found.";
+function buildCatalogContext(
+  items
+) {
+
+  if (
+    !items.length
+  ) {
+
+    return (
+      "No matching catalog items found."
+    );
   }
 
+
   return items
-    .map((item, index) => {
-      return `
+    .map(
+      (item, index) => {
+
+        return `
 ITEM ${index + 1}
 Type: ${item.type}
 Title: ${item.title}
 Price EUR: ${item.price_eur ?? "not specified"}
+Make/Model: ${item.make_model ?? "not specified"}
 Year: ${item.year ?? "not specified"}
 Mileage km: ${item.mileage_km ?? "not specified"}
 Engine: ${item.engine ?? "not specified"}
+Engine liters: ${item.engine_l ?? "not specified"}
 Power HP: ${item.power_hp ?? "not specified"}
 Emission: ${item.emission ?? "not specified"}
 Axle configuration: ${item.axle_configuration ?? "not specified"}
@@ -748,7 +1148,8 @@ Quantity: ${item.quantity ?? "not specified"}
 Listed URL: ${item.url}
 Details loaded: ${item.details_loaded ? "yes" : "no"}
 `;
-    })
+      }
+    )
     .join("\n");
 }
 
@@ -757,7 +1158,10 @@ Details loaded: ${item.details_loaded ? "yes" : "no"}
 // SYSTEM PROMPT
 // ============================================================
 
-function buildSystemPrompt(catalogContext) {
+function buildSystemPrompt(
+  catalogContext
+) {
+
   return `
 You are the Truck Point AI Consultant.
 
@@ -772,8 +1176,11 @@ Your job:
 6. Ask useful qualification questions when appropriate.
 
 LANGUAGES:
+
 The customer may communicate in Russian, English, German, Polish, Latvian or another language.
+
 Answer in the language used by the customer.
+
 
 VERY IMPORTANT CATALOG RULES:
 
@@ -805,17 +1212,24 @@ Do NOT claim that a vehicle is definitely physically available right now unless 
 If the customer asks about something that is not in the catalog:
 say that the information is not confirmed and offer to connect them with a manager.
 
-When recommending vehicles:
+
+WHEN RECOMMENDING VEHICLES:
+
 - include the listing URL
 - mention the price when available
 - explain briefly why it matches the customer's request
 - do not overwhelm the customer with every specification unless useful
 
-When the customer asks for ALL vehicles matching a condition:
-return ALL matching catalog items, not just one.
 
-If there are no matches:
-say that there are currently no matching listings in the imported catalog.
+WHEN THE CUSTOMER ASKS FOR ALL VEHICLES MATCHING A CONDITION:
+
+Return ALL matching catalog items, not just one.
+
+
+IF THERE ARE NO MATCHES:
+
+Say that there are currently no matching listings in the imported catalog.
+
 
 SALES QUALIFICATION:
 
@@ -833,14 +1247,19 @@ When appropriate, determine:
 - purchase timeframe
 
 Do not interrogate the customer with all questions at once.
+
 Ask only the next most useful question.
 
-If the customer is clearly interested in buying, encourage them to leave:
+
+IF THE CUSTOMER IS CLEARLY INTERESTED IN BUYING:
+
+Encourage them to leave:
 - name
 - phone
 - email
 
 The backend can send the lead to the sales team.
+
 
 CURRENT CATALOG:
 
@@ -853,85 +1272,132 @@ ${catalogContext}
 // HEALTH
 // ============================================================
 
-app.get("/health", (req, res) => {
-  const trucks =
-    catalog.filter(
-      item => item.type === "truck"
-    ).length;
+app.get(
+  "/health",
+  (req, res) => {
 
-  const trailers =
-    catalog.filter(
-      item => item.type === "trailer"
-    ).length;
+    const trucks =
+      catalog.filter(
+        item =>
+          item.type ===
+          "truck"
+      ).length;
 
-  res.json({
-    ok: true,
-    catalog_count: catalog.length,
-    trucks,
-    trailers,
-    sync: syncStatus
-  });
-});
+
+    const trailers =
+      catalog.filter(
+        item =>
+          item.type ===
+          "trailer"
+      ).length;
+
+
+    res.json({
+
+      ok: true,
+
+      catalog_count:
+        catalog.length,
+
+      trucks,
+
+      trailers,
+
+      sync:
+        syncStatus
+
+    });
+  }
+);
 
 
 // ============================================================
 // ROOT
 // ============================================================
 
-app.get("/", (req, res) => {
-  res.json({
-    status: "ok",
-    service: "Truck Point AI Consultant",
-    catalog_count: catalog.length
-  });
-});
+app.get(
+  "/",
+  (req, res) => {
+
+    res.json({
+
+      status: "ok",
+
+      service:
+        "Truck Point AI Consultant",
+
+      catalog_count:
+        catalog.length
+
+    });
+  }
+);
 
 
 // ============================================================
 // CHAT
 // ============================================================
 
-app.post("/api/chat", async (req, res) => {
-  try {
-    const messages =
-      Array.isArray(req.body.messages)
-        ? req.body.messages
-        : [];
+app.post(
+  "/api/chat",
+  async (req, res) => {
 
-    const latestUserMessage =
-      [...messages]
-        .reverse()
-        .find(
-          message =>
-            message &&
-            message.role === "user"
+    try {
+
+      const messages =
+        Array.isArray(
+          req.body.messages
+        )
+          ? req.body.messages
+          : [];
+
+
+      const latestUserMessage =
+        [...messages]
+          .reverse()
+          .find(
+            message =>
+              message &&
+              message.role ===
+              "user"
+          );
+
+
+      const userText =
+        latestUserMessage?.content ||
+        "";
+
+
+      const matchingCatalog =
+        searchCatalog(
+          userText,
+          messages
         );
 
-    const userText =
-      latestUserMessage?.content || "";
 
-    const matchingCatalog =
-  searchCatalog(userText, messages);
+      const catalogContext =
+        buildCatalogContext(
+          matchingCatalog
+        );
 
-    const catalogContext =
-      buildCatalogContext(
-        matchingCatalog
-      );
 
-    const systemPrompt =
-      buildSystemPrompt(
-        catalogContext
-      );
+      const systemPrompt =
+        buildSystemPrompt(
+          catalogContext
+        );
 
-    const aiMessages = [
-      {
-        role: "system",
-        content: systemPrompt
-      },
 
-      {
-        role: "developer",
-        content: `
+      const aiMessages = [
+
+        {
+          role: "system",
+          content:
+            systemPrompt
+        },
+
+        {
+          role: "developer",
+          content: `
 The deterministic catalog search found
 ${matchingCatalog.length} matching listing(s)
 for the latest customer message.
@@ -940,113 +1406,159 @@ Use those listings when relevant.
 
 Do not replace exact catalog results with generic advice.
 `
-      },
+        },
 
-      ...messages.slice(-20)
-    ];
+        ...messages.slice(-20)
 
-    const completion =
-  await openai.chat.completions.create({
-    model:
-      process.env.OPENAI_MODEL ||
-      "gpt-5-mini",
+      ];
 
-    messages: aiMessages
-  });
 
-    const answer =
-      completion.choices?.[0]?.message?.content ||
-      "Sorry, I could not generate an answer.";
+      const completion =
+        await openai.chat.completions.create({
 
-    res.json({
-      reply: answer,
-      catalog_matches:
-        matchingCatalog.length
-    });
+          model:
+            process.env.OPENAI_MODEL ||
+            "gpt-5-mini",
 
-  } catch (error) {
-    console.error(
-      "CHAT ERROR:",
-      error
-    );
+          messages:
+            aiMessages
 
-    res.status(500).json({
-      error: "AI request failed",
-      details: error.message
-    });
+        });
+
+
+      const answer =
+        completion
+          .choices?.[0]
+          ?.message?.content ||
+        "Sorry, I could not generate an answer.";
+
+
+      res.json({
+
+        reply:
+          answer,
+
+        catalog_matches:
+          matchingCatalog.length
+
+      });
+
+
+    } catch (error) {
+
+      console.error(
+        "CHAT ERROR:",
+        error
+      );
+
+
+      res.status(500).json({
+
+        error:
+          "AI request failed",
+
+        details:
+          error.message
+
+      });
+    }
   }
-});
+);
 
 
 // ============================================================
 // LEAD EMAIL
 // ============================================================
 
-app.post("/api/lead", async (req, res) => {
-  try {
-    const {
-      name,
-      phone,
-      email,
-      language,
-      equipment,
-      brand,
-      model,
-      budget,
-      timeframe,
-      use_case,
-      question,
-      conversation
-    } = req.body;
+app.post(
+  "/api/lead",
+  async (req, res) => {
 
-    const smtpUser =
-      process.env.SMTP_USER;
+    try {
 
-    const smtpPass =
-      process.env.SMTP_PASS;
+      const {
+        name,
+        phone,
+        email,
+        language,
+        equipment,
+        brand,
+        model,
+        budget,
+        timeframe,
+        use_case,
+        question,
+        conversation
+      } = req.body;
 
-    const leadToEmail =
-      process.env.LEAD_TO_EMAIL;
 
-    if (
-      !smtpUser ||
-      !smtpPass ||
-      !leadToEmail
-    ) {
-      return res.status(500).json({
-        error:
-          "SMTP configuration is incomplete"
-      });
-    }
+      const smtpUser =
+        process.env.SMTP_USER;
 
-    const transporter =
-      nodemailer.createTransport({
-        host:
-          process.env.SMTP_HOST ||
-          "smtp.mail.yahoo.com",
 
-        port:
-          Number(
-            process.env.SMTP_PORT || 465
-          ),
+      const smtpPass =
+        process.env.SMTP_PASS;
 
-        secure:
-          String(
-            process.env.SMTP_SECURE
-          ) === "true",
 
-        auth: {
-          user: smtpUser,
-          pass: smtpPass
-        }
-      });
+      const leadToEmail =
+        process.env.LEAD_TO_EMAIL;
 
-    const subject =
-      `Truck Point AI Lead${
-        name ? ` — ${name}` : ""
-      }`;
 
-    const text = `
+      if (
+        !smtpUser ||
+        !smtpPass ||
+        !leadToEmail
+      ) {
+
+        return res.status(500).json({
+
+          error:
+            "SMTP configuration is incomplete"
+
+        });
+      }
+
+
+      const transporter =
+        nodemailer.createTransport({
+
+          host:
+            process.env.SMTP_HOST ||
+            "smtp.mail.yahoo.com",
+
+          port:
+            Number(
+              process.env.SMTP_PORT ||
+              465
+            ),
+
+          secure:
+            String(
+              process.env.SMTP_SECURE
+            ) === "true",
+
+          auth: {
+
+            user:
+              smtpUser,
+
+            pass:
+              smtpPass
+
+          }
+
+        });
+
+
+      const subject =
+        `Truck Point AI Lead${
+          name
+            ? ` — ${name}`
+            : ""
+        }`;
+
+
+      const text = `
 New Truck Point AI lead
 
 Name: ${name || ""}
@@ -1068,47 +1580,76 @@ Conversation:
 ${conversation || ""}
 `;
 
-    await transporter.sendMail({
-      from: smtpUser,
-      to: leadToEmail,
-      replyTo: email || undefined,
-      subject,
-      text
-    });
 
-    res.json({
-      ok: true
-    });
+      await transporter.sendMail({
 
-  } catch (error) {
-    console.error(
-      "LEAD ERROR:",
-      error
-    );
+        from:
+          smtpUser,
 
-    res.status(500).json({
-      error: "Lead email failed",
-      details: error.message
-    });
+        to:
+          leadToEmail,
+
+        replyTo:
+          email || undefined,
+
+        subject,
+
+        text
+
+      });
+
+
+      res.json({
+
+        ok: true
+
+      });
+
+
+    } catch (error) {
+
+      console.error(
+        "LEAD ERROR:",
+        error
+      );
+
+
+      res.status(500).json({
+
+        error:
+          "Lead email failed",
+
+        details:
+          error.message
+
+      });
+    }
   }
-});
+);
 
 
 // ============================================================
 // START
 // ============================================================
 
-app.listen(PORT, () => {
-  console.log(
-    `Truck Point AI running on port ${PORT}`
-  );
+app.listen(
+  PORT,
+  () => {
 
-  // Запускаем импорт после старта сервера.
-  syncCatalog();
+    console.log(
+      `Truck Point AI running on port ${PORT}`
+    );
 
-  // Обновляем каталог каждые 30 минут.
-  setInterval(
-    syncCatalog,
-    30 * 60 * 1000
-  );
-});
+
+    // Запускаем импорт после старта сервера.
+    syncCatalog();
+
+
+    // Обновляем каталог каждые 30 минут.
+    setInterval(
+      syncCatalog,
+      30 * 60 * 1000
+    );
+
+  }
+);
