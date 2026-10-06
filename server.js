@@ -841,15 +841,13 @@ Do not replace exact catalog results with generic advice.
     ];
 
     const completion =
-      await openai.chat.completions.create({
-        model:
-          process.env.OPENAI_MODEL ||
-          "gpt-5-mini",
+  await openai.chat.completions.create({
+    model:
+      process.env.OPENAI_MODEL ||
+      "gpt-5-mini",
 
-        messages: aiMessages,
-
-        temperature: 0.2
-      });
+    messages: aiMessages
+  });
 
     const answer =
       completion.choices?.[0]?.message?.content ||
