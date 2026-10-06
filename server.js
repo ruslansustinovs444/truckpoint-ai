@@ -487,21 +487,115 @@ async function syncCatalog() {
 // CATALOG SEARCH
 // ============================================================
 
-function searchCatalog(message) {
-  const text = String(message || "")
-    .toLowerCase();
+function searchCatalog(message, conversation = []) {
+  const text = String(message || "").toLowerCase();
 
   let results = [...catalog];
 
-  // --------------------------------
-  // TYPE
-  // --------------------------------
+  // --------------------------------------------------
+  // 1. Если пользователь ссылается на конкретный
+  // автомобиль из предыдущего сообщения
+  // --------------------------------------------------
+
+  const previousAssistantText = conversation
+    .filter(message => message?.role === "assistant")
+    .map(message => String(message.content || ""))
+    .join("\n")
+    .toLowerCase();
+
+  // Ищем упоминания автомобилей из каталога
+  // в текущем сообщении и предыдущем ответе AI.
+  const candidateItems = catalog.filter(item => {
+    const title = String(item.title || "").toLowerCase();
+    const url = String(item.url || "").toLowerCase();
+
+    const price =
+      item.price_eur !== null &&
+      item.price_eur !== undefined
+        ? String(item.price_eur)
+        : "";
+
+    const titleWords = title
+      .split(/\s+/)
+      .filter(word => word.length >= 3);
+
+    const titleMatch =
+      title &&
+      titleWords.length > 0 &&
+      titleWords.filter(word => text.includes(word)).length >=
+        Math.min(2, titleWords.length);
+
+    const urlMatch =
+      url && text.includes(url);
+
+    const priceMatch =
+      price &&
+      (
+        text.includes(price) ||
+        text.includes(`€${price}`) ||
+        text.includes(`€ ${price}`)
+      );
+
+    return titleMatch || urlMatch || priceMatch;
+  });
+
+  // Если найден конкретный автомобиль,
+  // возвращаем именно его.
+  if (candidateItems.length > 0) {
+    return candidateItems;
+  }
+
+  // --------------------------------------------------
+  // 2. Если пользователь говорит "this truck",
+  // "этот грузовик", "этот автомобиль" и т.п.,
+  // ищем последний автомобиль, который AI показывал
+  // в предыдущем сообщении.
+  // --------------------------------------------------
+
+  const refersToPreviousVehicle =
+    /this truck|this vehicle|this tractor|this one|that truck|that vehicle|that one|этот тягач|этот грузовик|этот автомобиль|этот|эту машину|этой машине|данный автомобиль|тот тягач|тот грузовик/i.test(
+      text
+    );
+
+  if (
+    refersToPreviousVehicle &&
+    previousAssistantText
+  ) {
+    const previousMatches = catalog.filter(item => {
+      const title =
+        String(item.title || "").toLowerCase();
+
+      const url =
+        String(item.url || "").toLowerCase();
+
+      return (
+        previousAssistantText.includes(title) ||
+        previousAssistantText.includes(url)
+      );
+    });
+
+    if (previousMatches.length > 0) {
+      // Берём последний совпавший автомобиль,
+      // чтобы не вернуть весь список.
+      return [
+        previousMatches[previousMatches.length - 1]
+      ];
+    }
+  }
+
+  // --------------------------------------------------
+  // 3. TYPE
+  // --------------------------------------------------
 
   const asksTrailer =
-    /trailer|trailers|прицеп|полуприцеп|прицепы/i.test(text);
+    /trailer|trailers|semi-trailer|semi trailer|прицеп|полуприцеп|прицепы/i.test(
+      text
+    );
 
   const asksTruck =
-    /truck|trucks|tractor|тягач|тягачи|грузовик/i.test(text);
+    /truck|trucks|tractor|tractor unit|тягач|тягачи|грузовик/i.test(
+      text
+    );
 
   if (asksTrailer && !asksTruck) {
     results = results.filter(
@@ -515,10 +609,9 @@ function searchCatalog(message) {
     );
   }
 
-
-  // --------------------------------
-  // BUDGET
-  // --------------------------------
+  // --------------------------------------------------
+  // 4. BUDGET
+  // --------------------------------------------------
 
   let maxPrice = null;
 
@@ -549,10 +642,9 @@ function searchCatalog(message) {
     );
   }
 
-
-  // --------------------------------
-  // BRAND
-  // --------------------------------
+  // --------------------------------------------------
+  // 5. BRAND
+  // --------------------------------------------------
 
   const brands = [
     "daf",
@@ -592,10 +684,9 @@ function searchCatalog(message) {
     });
   }
 
-
-  // --------------------------------
-  // YEAR
-  // --------------------------------
+  // --------------------------------------------------
+  // 6. YEAR
+  // --------------------------------------------------
 
   const yearMatch =
     text.match(/\b(20\d{2})\b/);
@@ -607,7 +698,6 @@ function searchCatalog(message) {
       item => item.year === year
     );
   }
-
 
   return results;
 }
