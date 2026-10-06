@@ -262,6 +262,20 @@ function parseDetailPage(html, item) {
     .text();
 
 const rawSpecs = parseSpecs(description);
+  if (
+  item.url &&
+  item.url.includes("page258103603.html")
+) {
+  console.log(
+    "DEBUG MB ACTROS 1845 2014 RAW DESCRIPTION:",
+    JSON.stringify(description)
+  );
+
+  console.log(
+    "DEBUG MB ACTROS 1845 2014 SPECS:",
+    JSON.stringify(rawSpecs)
+  );
+}
   const specs = normalizeSpecs(rawSpecs);
 
   const images = [];
