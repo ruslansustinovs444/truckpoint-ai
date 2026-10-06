@@ -253,14 +253,15 @@ function parseDetailPage(html, item) {
     cleanText($("title").first().text()) ||
     item.title;
 
-  const descriptionElement =
-    $(".t764__descr.field").first().length
-      ? $(".t764__descr.field").first()
-      : $(".t764__descr").first();
+  const description =
+  descriptionElement
+    .clone()
+    .find("br")
+    .replaceWith("\n")
+    .end()
+    .text();
 
-  const description = descriptionElement.text();
-
-  const rawSpecs = parseSpecs(description);
+const rawSpecs = parseSpecs(description);
   const specs = normalizeSpecs(rawSpecs);
 
   const images = [];
