@@ -2738,49 +2738,64 @@ ${conversationText}
        * 13 AI summary
        */
 
-      const googleSheetsLead = {
-        date:
-          lead.date,
+const googleSheetsLead = {
+  date:
+    lead.date,
 
-        name:
-          lead.name,
+  name:
+    lead.name,
 
-        phone:
-          lead.phone,
+  /*
+   * Google Sheets interprets a value beginning
+   * with "+" as a formula in some cases.
+   *
+   * Keep the original phone everywhere else
+   * (email, lead response, etc.), but remove
+   * the leading "+" only for Google Sheets.
+   *
+   * Example:
+   * +371 6666666
+   * becomes:
+   * 371 6666666
+   */
+  phone:
+    String(lead.phone || "")
+      .trim()
+      .replace(/^\+/, ""),
 
-        email:
-          lead.email,
+  email:
+    lead.email,
 
-        language:
-          lead.language,
+  language:
+    lead.language,
 
-        model:
-          lead.model ||
-          lead.brand ||
-          "",
+  model:
+    lead.model ||
+    lead.brand ||
+    "",
 
-        year:
-          lead.year,
+  year:
+    lead.year,
 
-        budget:
-          lead.budget,
+  budget:
+    lead.budget,
 
-        axles:
-          lead.axle_configuration,
+  axles:
+    lead.axle_configuration,
 
-        customer_question:
-          lead.customer_question,
+  customer_question:
+    lead.customer_question,
 
-        manager_status:
-          lead.stage ||
-          "New",
+  manager_status:
+    lead.stage ||
+    "New",
 
-        page_url:
-          lead.page_url,
+  page_url:
+    lead.page_url,
 
-        ai_summary:
-          lead.ai_summary
-      };
+  ai_summary:
+    lead.ai_summary
+};
 
       console.log(
         "LEAD: sending email and Google Sheets in parallel..."
