@@ -2033,20 +2033,39 @@ app.post(
        * to load before searching it.
        */
 
-      if (catalogReadyPromise) {
-        try {
-          await withTimeout(
-            catalogReadyPromise,
-            25000,
-            "Catalog initialization"
-          );
-        } catch (error) {
-          console.error(
-            "CATALOG READY ERROR:",
-            error.message
-          );
-        }
-      }
+      if (
+  catalog.length === 0 &&
+  catalogReadyPromise
+) {
+  try {
+    console.log(
+      "Catalog is not ready yet. Waiting for initial synchronization..."
+    );
+
+    await catalogReadyPromise;
+
+    console.log(
+      `Catalog is ready: ${catalog.length} items`
+    );
+  } catch (error) {
+    console.error(
+      "CATALOG READY ERROR:",
+      error.message
+    );
+  }
+}
+
+if (catalog.length === 0) {
+  console.error(
+    "CHAT BLOCKED: catalog is still empty"
+  );
+
+  return res.status(503).json({
+    reply:
+      "The vehicle catalog is currently being updated. Please try again in a moment.",
+    show_lead_form: false
+  });
+}
 
       const previousConversation =
         Array.isArray(messages)
