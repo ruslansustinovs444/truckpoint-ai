@@ -768,6 +768,109 @@ function extractYear(text) {
   ];
 }
 
+
+/*
+ * Understand how the customer uses a year.
+ *
+ * Examples:
+ *
+ * "2021"                  -> exact 2021
+ * "year 2021"             -> exact 2021
+ * "from 2020"             -> 2020 or newer
+ * "2020 or newer"         -> 2020 or newer
+ * "not older than 2020"   -> 2020 or newer
+ * "не старше 2020"        -> 2020 or newer
+ * "от 2020 года"          -> 2020 or newer
+ *
+ * "up to 2020"            -> 2020 or older
+ * "2020 or older"         -> 2020 or older
+ * "до 2020 года"          -> 2020 or older
+ */
+function extractYearFilter(text) {
+  const normalized =
+    normalizeSearchText(text);
+
+  const years =
+    extractYear(text);
+
+  if (!years.length) {
+    return null;
+  }
+
+  const year =
+    years[0];
+
+  const minimumYearPatterns = [
+    /not older than\s+(19\d{2}|20\d{2})/i,
+    /(19\d{2}|20\d{2})\s+or newer/i,
+    /(19\d{2}|20\d{2})\s+and newer/i,
+    /from\s+(19\d{2}|20\d{2})/i,
+    /since\s+(19\d{2}|20\d{2})/i,
+
+    /не старше\s+(19\d{2}|20\d{2})/i,
+    /от\s+(19\d{2}|20\d{2})/i,
+    /(19\d{2}|20\d{2})\s+и новее/i,
+    /(19\d{2}|20\d{2})\s+или новее/i,
+    /начиная с\s+(19\d{2}|20\d{2})/i,
+
+    /ab\s+(19\d{2}|20\d{2})/i,
+    /(19\d{2}|20\d{2})\s+oder neuer/i,
+
+    /od\s+(19\d{2}|20\d{2})/i,
+    /(19\d{2}|20\d{2})\s+lub nowszy/i,
+
+    /no\s+(19\d{2}|20\d{2})/i,
+    /(19\d{2}|20\d{2})\s+vai jaunāks/i
+  ];
+
+  const maximumYearPatterns = [
+    /up to\s+(19\d{2}|20\d{2})/i,
+    /(19\d{2}|20\d{2})\s+or older/i,
+    /before\s+(19\d{2}|20\d{2})/i,
+
+    /до\s+(19\d{2}|20\d{2})/i,
+    /не новее\s+(19\d{2}|20\d{2})/i,
+    /(19\d{2}|20\d{2})\s+и старше/i,
+
+    /bis\s+(19\d{2}|20\d{2})/i,
+    /(19\d{2}|20\d{2})\s+oder älter/i,
+
+    /do\s+(19\d{2}|20\d{2})/i,
+    /(19\d{2}|20\d{2})\s+lub starszy/i,
+
+    /līdz\s+(19\d{2}|20\d{2})/i
+  ];
+
+  if (
+    minimumYearPatterns.some(
+      pattern =>
+        pattern.test(normalized)
+    )
+  ) {
+    return {
+      type: "min",
+      year
+    };
+  }
+
+  if (
+    maximumYearPatterns.some(
+      pattern =>
+        pattern.test(normalized)
+    )
+  ) {
+    return {
+      type: "max",
+      year
+    };
+  }
+
+  return {
+    type: "exact",
+    years
+  };
+}
+
 function extractEuroClasses(text) {
   const normalized =
     normalizeSearchText(text);
@@ -1081,15 +1184,20 @@ function searchCatalog(
       userText
     );
 
-  const years =
-    extractYear(
-      userText
-    );
+ const years =
+  extractYear(
+    userText
+  );
 
-  const euroClasses =
-    extractEuroClasses(
-      userText
-    );
+const yearFilter =
+  extractYearFilter(
+    userText
+  );
+
+const euroClasses =
+  extractEuroClasses(
+    userText
+  );
 
   const brands =
     detectBrands(
@@ -1239,18 +1347,63 @@ function searchCatalog(
       );
   }
 
-  if (
-    years.length
-  ) {
-    candidates =
-      candidates.filter(
-        item =>
-          item.year &&
-          years.includes(
-            Number(item.year)
+  if (yearFilter) {
+  candidates =
+    candidates.filter(item => {
+      if (!item.year) {
+        return false;
+      }
+
+      const itemYear =
+        Number(item.year);
+
+      if (
+        !Number.isFinite(itemYear)
+      ) {
+        return false;
+      }
+
+      // Example:
+      // "not older than 2020"
+      // "не старше 2020"
+      // means 2020 and newer
+      if (
+        yearFilter.type === "min"
+      ) {
+        return (
+          itemYear >=
+          yearFilter.year
+        );
+      }
+
+      // Example:
+      // "up to 2020"
+      // "до 2020"
+      // means 2020 and older
+      if (
+        yearFilter.type === "max"
+      ) {
+        return (
+          itemYear <=
+          yearFilter.year
+        );
+      }
+
+      // Exact year:
+      // "2021"
+      if (
+        yearFilter.type === "exact"
+      ) {
+        return (
+          yearFilter.years.includes(
+            itemYear
           )
-      );
-  }
+        );
+      }
+
+      return true;
+    });
+}
 
   const hasSpecificModel =
     explicitlyNamed.length > 0;
@@ -1633,6 +1786,10 @@ function detectLeadIntent(text) {
   const normalized =
     normalizeSearchText(text);
 
+  if (!normalized) {
+    return false;
+  }
+
   const strongIntentPatterns = [
 
     /* =========================
@@ -1642,41 +1799,44 @@ function detectLeadIntent(text) {
     /\bi want to buy\b/i,
     /\bi want to purchase\b/i,
     /\bi would like to buy\b/i,
-    /\bi am interested in (this|the|a) (truck|tractor|trailer|vehicle)\b/i,
+    /\bi'm interested\b/i,
+    /\bi am interested\b/i,
+    /\binterested in this\b/i,
+    /\binterested in the\b/i,
 
     /\bis it available\b/i,
     /\bis this available\b/i,
+    /\bstill available\b/i,
+    /\bcheck availability\b/i,
+    /\bconfirm availability\b/i,
 
-    /\bplease contact me\b/i,
     /\bcontact me\b/i,
-    /\bcan you contact me\b/i,
+    /\bplease contact me\b/i,
     /\bcall me\b/i,
     /\bplease call me\b/i,
+    /\bget in touch\b/i,
 
-    /\bcan i speak to (a )?manager\b/i,
-    /\bspeak to (a )?manager\b/i,
-    /\bmanager contact\b/i,
+    /\bmanager\b/i,
+    /\bsales manager\b/i,
+    /\bsales team\b/i,
 
-    /\bconnect me with (a )?manager\b/i,
-    /\bput me in touch with (a )?manager\b/i,
-    /\bconnect me to (a )?manager\b/i,
+    /\breserve\b/i,
+    /\bbook this\b/i,
 
-    /\bi want to reserve\b/i,
-    /\bi want to book\b/i,
-    /\bcan i reserve\b/i,
-
-    /\bplease send (me )?(the )?documents\b/i,
+    /\bsend documents\b/i,
     /\bsend me the documents\b/i,
-    /\bcan you send documents\b/i,
+    /\bmore photos\b/i,
+    /\bsend photos\b/i,
 
-    /\bcan you check availability\b/i,
-    /\bcheck availability\b/i,
-
-    /\bwhat is the final price\b/i,
     /\bfinal price\b/i,
+    /\bbest price\b/i,
+    /\bdiscount\b/i,
+    /\bnegotiate\b/i,
 
-    /\bi want to buy within\b/i,
-    /\bi plan to buy within\b/i,
+    /\btransport\b/i,
+    /\bdelivery\b/i,
+    /\bfinancing\b/i,
+    /\bfinance\b/i,
 
     /* =========================
        RUSSIAN
@@ -1684,47 +1844,58 @@ function detectLeadIntent(text) {
 
     /хочу купить/i,
     /хочу приобрести/i,
-    /хочу купить этот/i,
-    /интересует этот грузовик/i,
-    /интересует этот тягач/i,
-    /интересует эта машина/i,
-    /интересует этот автомобиль/i,
+    /готов купить/i,
+    /готов приобрести/i,
 
-    /можно купить/i,
+    /интересует этот/i,
+    /интересует эта/i,
+    /меня интересует/i,
+    /заинтересован/i,
 
-    /он в наличии/i,
-    /она в наличии/i,
-    /есть в наличии/i,
+    /в наличии/i,
+    /есть ли/i,
+    /проверить наличие/i,
+    /узнать наличие/i,
+    /подтвердить наличие/i,
 
     /свяжитесь со мной/i,
-    /свяжи меня с менеджером/i,
-    /свяжите меня с менеджером/i,
-    /связать меня с менеджером/i,
-    /связаться с менеджером/i,
-    /связь с менеджером/i,
-    /хочу поговорить с менеджером/i,
-    /хочу связаться с менеджером/i,
-    /соедините с менеджером/i,
-    /соедините меня с менеджером/i,
-
+    /связаться со мной/i,
     /позвоните мне/i,
     /перезвоните мне/i,
 
-    /проверить наличие/i,
-    /узнать наличие/i,
+    /менеджер/i,
+    /с менеджером/i,
+    /связаться с менеджером/i,
+    /свяжите с менеджером/i,
+    /соедините с менеджером/i,
+
+    /оставить заявку/i,
+    /оставлю заявку/i,
+    /хочу оставить заявку/i,
+    /отправить заявку/i,
+    /оформить заявку/i,
 
     /забронировать/i,
-    /хочу забронировать/i,
+    /бронь/i,
 
+    /документы/i,
     /пришлите документы/i,
     /отправьте документы/i,
-    /нужны документы/i,
+
+    /больше фото/i,
+    /дополнительные фото/i,
+    /пришлите фото/i,
 
     /финальная цена/i,
     /окончательная цена/i,
+    /лучшая цена/i,
+    /скидка/i,
+    /торг/i,
 
-    /хочу купить в течение/i,
-    /планирую купить/i,
+    /доставка/i,
+    /транспорт/i,
+    /финансирование/i,
+    /лизинг/i,
 
     /* =========================
        GERMAN
@@ -1732,31 +1903,48 @@ function detectLeadIntent(text) {
 
     /\bich möchte kaufen\b/i,
     /\bich will kaufen\b/i,
-    /\bist es verfügbar\b/i,
+    /\binteressiert\b/i,
+    /\bverfügbar\b/i,
     /\bkontaktieren sie mich\b/i,
-    /\bverbinden sie mich mit einem mitarbeiter\b/i,
-    /\bich möchte mit einem mitarbeiter sprechen\b/i,
-    /\bich möchte mit einem manager sprechen\b/i,
+    /\brufen sie mich an\b/i,
+    /\bmanager\b/i,
+    /\bmitarbeiter\b/i,
+    /\breservieren\b/i,
+    /\bdokumente\b/i,
+    /\btransport\b/i,
+    /\bfinanzierung\b/i,
 
     /* =========================
        POLISH
     ========================= */
 
     /\bchcę kupić\b/i,
-    /\bczy jest dostępny\b/i,
+    /\bjestem zainteresowany\b/i,
+    /\bdostępny\b/i,
     /\bproszę o kontakt\b/i,
-    /\bpołącz mnie z menedżerem\b/i,
-    /\bchcę porozmawiać z menedżerem\b/i,
+    /\bzadzwoń\b/i,
+    /\bmenedżer\b/i,
+    /\brezerwacja\b/i,
+    /\bdokumenty\b/i,
+    /\btransport\b/i,
+    /\bfinansowanie\b/i,
 
     /* =========================
        LATVIAN
     ========================= */
 
     /\bgribu iegādāties\b/i,
-    /\bvai ir pieejams\b/i,
+    /\bgribu pirkt\b/i,
+    /\binteresē\b/i,
+    /\bpieejams\b/i,
     /\blūdzu sazināties\b/i,
-    /\bsavienojiet mani ar vadītāju\b/i,
-    /\bgribu runāt ar vadītāju\b/i
+    /\bpiezvaniet\b/i,
+    /\bvadītāju\b/i,
+    /\bmenedžeri\b/i,
+    /\brezervēt\b/i,
+    /\bdokumenti\b/i,
+    /\btransports\b/i,
+    /\bfinansējums\b/i
   ];
 
   if (
@@ -1768,19 +1956,42 @@ function detectLeadIntent(text) {
     return true;
   }
 
-  /* =========================
-     BUYING TIMEFRAME
-  ========================= */
+  /*
+   * Customer has both:
+   * 1. purchase timeframe
+   * 2. interest in a vehicle
+   *
+   * Then we also treat this as a sales lead.
+   */
 
   const hasBuyingTimeframe =
-    /\b(within|in the next|next)\s+\d*\s*(week|weeks|month|months|days)\b/i.test(text) ||
-    /в течение\s+(недели|месяца|двух недель|двух месяцев)/i.test(text) ||
-    /в ближайшее время/i.test(text) ||
-    /в этом месяце/i.test(text);
+    /\b(within|in the next|next)\s+\d*\s*(day|days|week|weeks|month|months)\b/i.test(normalized) ||
+
+    /в течение\s+(дня|недели|месяца|двух недель|двух месяцев)/i.test(normalized) ||
+
+    /в ближайшее время/i.test(normalized) ||
+    /в этом месяце/i.test(normalized) ||
+    /на этой неделе/i.test(normalized) ||
+
+    /\bdiese woche\b/i.test(normalized) ||
+    /\bdiesen monat\b/i.test(normalized) ||
+
+    /\bw tym tygodniu\b/i.test(normalized) ||
+    /\bw tym miesiącu\b/i.test(normalized) ||
+
+    /\bšonedēļ\b/i.test(normalized) ||
+    /\bšomēnes\b/i.test(normalized);
 
   const hasVehicleInterest =
-    /\b(interested in|like|want|looking to buy)\b/i.test(text) ||
-    /интересует|нравится|хочу купить|хочу взять|хочу приобрести/i.test(text);
+    /\b(interested|want|buy|purchase|looking for|looking to buy)\b/i.test(normalized) ||
+
+    /интересует|хочу|купить|приобрести|ищу|нужен|нужна/i.test(normalized) ||
+
+    /\binteressiert|kaufen|suche\b/i.test(normalized) ||
+
+    /\bzainteresowany|kupić|szukam\b/i.test(normalized) ||
+
+    /\binteresē|pirkt|meklēju\b/i.test(normalized);
 
   if (
     hasBuyingTimeframe &&
